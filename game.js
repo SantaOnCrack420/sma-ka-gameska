@@ -83,12 +83,38 @@ function submitNick() {
 nickBtn.addEventListener('click', submitNick);
 nickInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitNick(); });
 
-function loadLB() { try { return JSON.parse(localStorage.getItem('smazak_lb') || '[]'); } catch (_) { return []; } }
-function submitScore(name, sc) {      // zatím lokální; backend doplníme později
-  const lb = loadLB();
-  lb.push({ name, score: sc });
-  lb.sort((a, b) => b.score - a.score);
-  localStorage.setItem('smazak_lb', JSON.stringify(lb.slice(0, 20)));
+// Globální leaderboard přes Firebase Realtime Database (REST).
+const DB_URL = 'https://smazkaxdddd-default-rtdb.europe-west1.firebasedatabase.app';
+function loadLocalLB() { try { return JSON.parse(localStorage.getItem('smazak_lb') || '[]'); } catch (_) { return []; } }
+let lbCache = loadLocalLB();           // co se kreslí (sync cache)
+function loadLB() { return lbCache; }
+function refreshLB() {                  // stáhni globální žebříček do cache
+  fetch(DB_URL + '/scores.json')
+    .then(r => r.json())
+    .then(data => {
+      const arr = data
+        ? Object.values(data).filter(e => e && typeof e.score === 'number')
+            .map(e => ({ name: String(e.name || '?').slice(0, 12), score: e.score }))
+        : [];
+      arr.sort((a, b) => b.score - a.score);
+      lbCache = arr.slice(0, 50);
+      localStorage.setItem('smazak_lb', JSON.stringify(lbCache.slice(0, 20)));  // offline záloha
+    })
+    .catch(() => {});
+}
+function submitScore(name, sc) {
+  // lokálně hned (vidíš i offline)
+  const local = loadLocalLB();
+  local.push({ name, score: sc });
+  local.sort((a, b) => b.score - a.score);
+  localStorage.setItem('smazak_lb', JSON.stringify(local.slice(0, 20)));
+  lbCache = local.slice(0, 50);
+  // do cloudu
+  fetch(DB_URL + '/scores.json', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, score: sc, ts: Date.now() }),
+  }).then(() => setTimeout(refreshLB, 600)).catch(() => {});
 }
 
 // ---------- HUD ----------
@@ -1102,7 +1128,10 @@ function drawGameOver() {
 }
 
 // ---------- Smyčka ----------
+let lbTick = 0;
 function loop() {
+  // průběžně obnov globální žebříček (mimo hru, ~každých 6 s)
+  if (state !== 'PLAYING' && (++lbTick % 360 === 0)) refreshLB();
   // klikací efekt menu → po doznění spusť hru
   if (pendingStart) { if (menuPress > 0) menuPress--; else { pendingStart = false; startGame(); } }
   if (hitstop > 0) hitstop--; else update();   // hitstop = mikro-zmrazení
@@ -1145,6 +1174,7 @@ function loop() {
 buildMap();
 showHud(false);
 loop();
+refreshLB();             // načti globální žebříček
 if (!nick) showNick();   // poprvé: vyžádej nick
 
 // pokus spustit hudbu hned při načtení (pokud prohlížeč povolí autoplay);
