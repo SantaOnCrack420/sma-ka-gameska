@@ -433,7 +433,7 @@ function drawMenu() {
   ctx.restore();
   ctx.lineWidth = 3; ctx.strokeStyle = '#ffd23f';
   ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 14); ctx.stroke();
-  gtaText('▶  NOVÁ KRA', VW/2, by + bh/2 + 1, 30, '#ffd23f', '#000', 5);
+  gtaText('▶  NOVÁ HRA', VW/2, by + bh/2 + 1, 30, '#ffd23f', '#000', 5);
   menuBtn = { x: bx, y: by, w: bw, h: bh };
 
   // --- Disclaimer dole ---
@@ -447,9 +447,9 @@ function drawMenu() {
 function drawGameOver() {
   ctx.fillStyle = 'rgba(0,0,0,0.75)';
   ctx.fillRect(0, 0, VW, VH);
-  gtaText('KONEC KRY', VW/2, VH/2 - 40, 52, '#ff3b3b', '#000', 7);
+  gtaText('KONEC HRY', VW/2, VH/2 - 40, 52, '#ff3b3b', '#000', 7);
   gtaText(`SKÓRE: ${score}`, VW/2, VH/2 + 20, 34, '#ffd700');
-  gtaText('TAPNI PRO NOVOU KRU', VW/2, VH/2 + 80, 22, '#fff');
+  gtaText('TAPNI PRO NOVOU HRU', VW/2, VH/2 + 80, 22, '#fff');
 }
 
 // ---------- Smyčka ----------
