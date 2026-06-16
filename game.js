@@ -145,20 +145,31 @@ canvas.addEventListener('touchend',   e => { e.preventDefault(); for (const t of
 canvas.addEventListener('mousedown', () => { if (state !== 'PLAYING') startGame(); });
 
 // ---------- Herní stav ----------
+const PLAZA_WX = 19.5 * TILE;   // střed Náměstí Míru (cogani)
+const PLAZA_WY = 19.5 * TILE;
+
 let state = 'MENU';
 let menuBtn = null;
 let score = 0, lives = 3;
-let fries = [], pigeons = [], particles = [];
-let shootCd = 0, pigKills = 0;
+let fries = [], pigeons = [], particles = [], npcs = [], cogani = [], bags = [];
+let shootCd = 0, pigKills = 0, coganKills = 0, bagsGot = 0;
+let hurtCd = 0;          // nezranitelnost po zásahu
+let popups = [];         // krátké hlášky na obrazovce
+
+// barvy triček chodců
+const NPC_COLORS = ['#c0392b','#2980b9','#27ae60','#8e44ad','#d35400','#16a085'];
 
 function startGame() {
   state = 'PLAYING';
-  score = 0; lives = 3; pigKills = 0;
-  fries = []; pigeons = []; particles = [];
+  score = 0; lives = 3; pigKills = 0; coganKills = 0; bagsGot = 0; hurtCd = 0;
+  fries = []; pigeons = []; particles = []; npcs = []; cogani = []; bags = []; popups = [];
   player.wx = 7*TILE+32; player.wy = 8*TILE+32;
-  player.vx = 0; player.vy = 0;
+  player.vx = 0; player.vy = 0; player.boostT = 0;
   cam.x = player.wx; cam.y = player.wy;
   for (let i = 0; i < 8; i++) spawnPigeon();
+  for (let i = 0; i < 7; i++) spawnNpc();
+  for (let i = 0; i < 5; i++) spawnCogan();
+  for (let i = 0; i < 4; i++) spawnBag();
   showHud(true);
   updateHud();
 }
@@ -167,16 +178,37 @@ function updateHud() {
   scoreEl.textContent = `SKÓRE: ${score}`;
   livesEl.textContent = '❤️'.repeat(Math.max(0, lives));
 }
+function popup(text) { popups.push({ text, t: 150 }); }
 
-// ---------- Holubi ----------
-function spawnPigeon() {
+// ---------- Spawnery ----------
+function randWalkable(minDistFromPlayer) {
   for (let tries = 0; tries < 30; tries++) {
     const wx = Math.random()*WPX, wy = Math.random()*WPY;
     if (isSolidAt(wx, wy)) continue;
-    if (wdist(wx, wy, player.wx, player.wy) < 280) continue;
-    pigeons.push({ wx, wy, t: Math.random()*100, hp: 1 });
+    if (minDistFromPlayer && wdist(wx, wy, player.wx, player.wy) < minDistFromPlayer) continue;
+    return { wx, wy };
+  }
+  return null;
+}
+function spawnPigeon() {
+  const p = randWalkable(280); if (p) pigeons.push({ wx: p.wx, wy: p.wy, t: Math.random()*100, hp: 1 });
+}
+function spawnNpc() {
+  const p = randWalkable(120);
+  if (p) npcs.push({ wx: p.wx, wy: p.wy, t: Math.random()*100, col: NPC_COLORS[(Math.random()*NPC_COLORS.length)|0], dir: Math.random()*Math.PI*2 });
+}
+function spawnCogan() {
+  // spawn poblíž náměstí
+  for (let tries = 0; tries < 30; tries++) {
+    const wx = PLAZA_WX + (Math.random()-0.5)*6*TILE;
+    const wy = PLAZA_WY + (Math.random()-0.5)*6*TILE;
+    if (isSolidAt(wx, wy)) continue;
+    cogani.push({ wx: (wx+WPX)%WPX, wy: (wy+WPY)%WPY, t: Math.random()*100, hp: 2, hit: 0 });
     return;
   }
+}
+function spawnBag() {
+  const p = randWalkable(200); if (p) bags.push({ wx: p.wx, wy: p.wy, t: Math.random()*100 });
 }
 
 // ---------- Hranolky ----------
@@ -186,6 +218,10 @@ function shoot() {
   for (const p of pigeons) {
     const d = wdist(player.wx, player.wy, p.wx, p.wy);
     if (d < bd) { bd = d; best = p; }
+  }
+  for (const c of cogani) {            // auto-aim míří i na cogany (do 320 px)
+    const d = wdist(player.wx, player.wy, c.wx, c.wy);
+    if (d < bd && d < 320) { bd = d; best = c; }
   }
   let ang = player.angle - Math.PI/2;
   if (best) {
@@ -217,10 +253,12 @@ function update() {
     if (keys['ArrowUp']    || keys['w'] || keys['W']) mdy -= 1;
     if (keys['ArrowDown']  || keys['s'] || keys['S']) mdy += 1;
   }
+  if (player.boostT > 0) player.boostT--;
+  const spd = player.speed * (player.boostT > 0 ? 2 : 1);   // párno = 200 %
   if (mdx || mdy) {
     const l = Math.hypot(mdx, mdy) || 1;
-    player.vx = (mdx/l)*player.speed;
-    player.vy = (mdy/l)*player.speed;
+    player.vx = (mdx/l)*spd;
+    player.vy = (mdy/l)*spd;
     player.angle = Math.atan2(mdy, mdx) + Math.PI/2;
     if (mdx > 0.15) facing = 1; else if (mdx < -0.15) facing = -1;
   } else { player.vx *= 0.7; player.vy *= 0.7; }
@@ -260,6 +298,77 @@ function update() {
   }
   pigeons = pigeons.filter(p => p.hp > 0);
   while (pigeons.length < 8) spawnPigeon();
+
+  // --- chodci (ambient) ---
+  for (const n of npcs) {
+    n.t += 0.02;
+    if (Math.random() < 0.01) n.dir = Math.random()*Math.PI*2;
+    const vx = Math.cos(n.dir)*0.7, vy = Math.sin(n.dir)*0.7;
+    let nxp = (n.wx + vx + WPX) % WPX, nyp = (n.wy + vy + WPY) % WPY;
+    if (!isSolidAt(nxp, n.wy)) n.wx = nxp; else n.dir = Math.random()*Math.PI*2;
+    if (!isSolidAt(n.wx, nyp)) n.wy = nyp;
+  }
+
+  // --- cogani (nepřátelé u náměstí) ---
+  if (hurtCd > 0) hurtCd--;
+  for (const c of cogani) {
+    c.t += 0.05;
+    if (c.hit > 0) c.hit--;
+    const d = wdist(c.wx, c.wy, player.wx, player.wy);
+    let vx, vy;
+    if (d < 260) {
+      // honí hráče
+      let dx = player.wx - c.wx, dy = player.wy - c.wy;
+      if (dx >  WPX/2) dx -= WPX; if (dx < -WPX/2) dx += WPX;
+      if (dy >  WPY/2) dy -= WPY; if (dy < -WPY/2) dy += WPY;
+      const l = Math.hypot(dx, dy) || 1;
+      vx = dx/l*1.5; vy = dy/l*1.5;
+    } else {
+      // courá kolem náměstí
+      vx = Math.cos(c.t)*0.6; vy = Math.sin(c.t*1.2)*0.6;
+    }
+    let cxp = (c.wx + vx + WPX) % WPX, cyp = (c.wy + vy + WPY) % WPY;
+    if (!isSolidAt(cxp, c.wy)) c.wx = cxp;
+    if (!isSolidAt(c.wx, cyp)) c.wy = cyp;
+    // kontakt = ztráta života
+    if (d < 28 && hurtCd === 0) {
+      lives--; hurtCd = 90; updateHud();
+      boom(player.wx, player.wy, '#ff3b3b', 12);
+      popup('🤕 Cogan tě dostal!');
+      if (lives <= 0) { gameOver(); return; }
+    }
+  }
+  // hranolky vs cogani
+  for (const f of fries) {
+    if (f.life <= 0) continue;
+    for (const c of cogani) {
+      if (c.hp > 0 && wdist(f.wx, f.wy, c.wx, c.wy) < 24) {
+        c.hp--; c.hit = 10; f.life = 0;
+        boom(c.wx, c.wy, '#e8a020', 8);
+        if (c.hp <= 0) { score += 25; coganKills++; updateHud(); boom(c.wx, c.wy, '#ff3b3b', 14); }
+      }
+    }
+  }
+  cogani = cogani.filter(c => c.hp > 0);
+  while (cogani.length < 5) spawnCogan();
+
+  // --- pytlíky párno (sběr) ---
+  for (const b of bags) { b.t += 0.05; }
+  for (const b of bags) {
+    if (wdist(b.wx, b.wy, player.wx, player.wy) < 26) {
+      b.got = true; bagsGot++; score += 15;
+      player.boostT = 300;   // ~5 s na 60 fps
+      boom(player.wx, player.wy, '#ffffff', 14);
+      popup('💊 Párno! 200% rychlost xd');
+      updateHud();
+    }
+  }
+  bags = bags.filter(b => !b.got);
+  while (bags.length < 4) spawnBag();
+
+  // --- popupy ---
+  for (const p of popups) p.t--;
+  popups = popups.filter(p => p.t > 0);
 
   for (const pt of particles) { pt.wx += pt.vx; pt.wy += pt.vy; pt.life--; }
   particles = particles.filter(pt => pt.life > 0);
@@ -326,6 +435,13 @@ function drawPlayer() {
   ctx.fillStyle = 'rgba(0,0,0,0.30)';
   ctx.beginPath(); ctx.ellipse(0, 26, 20, 7, 0, 0, Math.PI*2); ctx.fill();
 
+  // aura párna (boost)
+  if (player.boostT > 0) {
+    const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 42);
+    g.addColorStop(0, 'rgba(120,220,255,0.35)'); g.addColorStop(1, 'rgba(120,220,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 42, 0, Math.PI*2); ctx.fill();
+  }
+
   if (charReady) {
     const moving = Math.hypot(player.vx, player.vy) > 0.4;
     const bob = moving ? Math.sin(Date.now()/110) * 2 : 0;
@@ -357,6 +473,61 @@ function drawPigeons() {
   }
 }
 
+// malá top-down postavička (hlava + tričko)
+function drawLittlePerson(x, y, shirt, bob) {
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.ellipse(x, y+12, 11, 4, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = shirt;                                  // tělo
+  ctx.beginPath(); ctx.roundRect(x-9, y-4+bob, 18, 18, 6); ctx.fill();
+  ctx.fillStyle = '#e8c39a';                              // hlava
+  ctx.beginPath(); ctx.arc(x, y-8+bob, 7, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x, y-8+bob, 7, 0, Math.PI*2); ctx.stroke();
+}
+
+function drawNpcs() {
+  for (const n of npcs) {
+    const [x, y] = wts(n.wx, n.wy);
+    if (x < -40 || x > VW+40 || y < -40 || y > VH+40) continue;
+    drawLittlePerson(x, y, n.col, Math.sin(n.t*4)*1.5);
+  }
+}
+
+function drawCogani() {
+  for (const c of cogani) {
+    const [x, y] = wts(c.wx, c.wy);
+    if (x < -40 || x > VW+40 || y < -40 || y > VH+40) continue;
+    const flash = c.hit > 0 ? '#ffffff' : '#222';         // tmavá mikina, blikne při zásahu
+    drawLittlePerson(x, y, flash, Math.sin(c.t*5)*2);
+    // kšiltovka
+    ctx.fillStyle = c.hit > 0 ? '#ffffff' : '#111';
+    ctx.fillRect(x-7, y-15, 14, 4);
+    // health pruh
+    if (c.hp < 2) { ctx.fillStyle = '#e74c3c'; ctx.fillRect(x-9, y-20, 18*(c.hp/2), 3); }
+  }
+}
+
+function drawBags() {
+  for (const b of bags) {
+    const [x, y] = wts(b.wx, b.wy);
+    if (x < -40 || x > VW+40 || y < -40 || y > VH+40) continue;
+    const pulse = 1 + Math.sin(b.t*3)*0.08;
+    ctx.save(); ctx.translate(x, y); ctx.scale(pulse, pulse);
+    // sáček
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.roundRect(-9, -7, 18, 16, 3); ctx.fill();
+    ctx.strokeStyle = '#aaa'; ctx.lineWidth = 1; ctx.stroke();
+    // bílý prášek uvnitř
+    ctx.fillStyle = '#f2f2f2';
+    ctx.beginPath(); ctx.moveTo(-7, 8); ctx.lineTo(7, 8); ctx.lineTo(4, 0); ctx.lineTo(-4, 0); ctx.fill();
+    // nápis PÁRNO
+    ctx.fillStyle = '#c0392b'; ctx.font = 'bold 5px Oswald, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('PÁRNO', 0, -3);
+    ctx.restore();
+  }
+}
+
 function drawFries() {
   ctx.fillStyle = '#f4c430';
   for (const f of fries) {
@@ -365,6 +536,22 @@ function drawFries() {
     ctx.fillRect(-5, -1.5, 10, 3);
     ctx.restore();
   }
+}
+
+function drawPopups() {
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  let i = 0;
+  for (const p of popups) {
+    const a = Math.min(1, p.t/40);
+    ctx.globalAlpha = a;
+    ctx.font = `bold 18px Oswald, sans-serif`;
+    ctx.lineWidth = 4; ctx.strokeStyle = '#000';
+    const yy = VH*0.30 + i*26;
+    ctx.strokeText(p.text, VW/2, yy);
+    ctx.fillStyle = '#fff'; ctx.fillText(p.text, VW/2, yy);
+    i++;
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawParticles() {
@@ -463,9 +650,13 @@ function loop() {
   } else {
     drawMap();
     drawParticles();
+    drawBags();
+    drawNpcs();
     drawPigeons();
+    drawCogani();
     drawFries();
     drawPlayer();
+    drawPopups();
     drawJoystick();
     if (state === 'OVER') drawGameOver();
   }
