@@ -182,18 +182,18 @@ const scoreEl = document.getElementById('score');
 const livesEl = document.getElementById('lives');
 function showHud(on) { if (ui) ui.style.display = on ? 'flex' : 'none'; }
 
-// ---------- Svět (model centra Českého Těšína) ----------
+// ---------- Svět (Náměstí ČSA, Český Těšín) ----------
 const TILE = 64;
-const COLS = 40, ROWS = 52;
+const COLS = 28, ROWS = 38;
 const WPX = COLS * TILE;
 const WPY = ROWS * TILE;
 
 const T = { GRASS:0, ROAD:1, SIDEWALK:2, BUILDING:3, PLAZA:4, WATER:5, BRIDGE:6, POLAND:7 };
-const SOLID = new Set([T.BUILDING, T.WATER]);   // most i polská strana = pochozí
+const SOLID = new Set([T.BUILDING, T.WATER]);
 
-// startovní bod = Náměstí ČSA (dlažba)
-const SPAWN_WX = 20 * TILE + 32;
-const SPAWN_WY = 15 * TILE + 32;
+// startovní bod = na dlažbě jižně od kašny
+const SPAWN_WX = 9 * TILE + 32;
+const SPAWN_WY = 26 * TILE + 32;
 
 let map = new Int8Array(COLS * ROWS);
 const at = (c, r) => map[r * COLS + c];
@@ -214,53 +214,56 @@ function courtBlock(c0, r0, c1, r1) {
     }
 }
 
+// props na náměstí (kreslené do mapy; kašna má kolizi přes WATER dlaždice)
+let PROPS = [];
+
 function buildMap() {
-  map.fill(T.GRASS);
+  map.fill(T.PLAZA);     // celé náměstí = dlažba
 
-  // vnější vodní rámec (hranice; wrap-seam = voda↔voda = neviditelný)
-  fill(0, 0, COLS-1, 3, T.WATER);
-  fill(0, ROWS-4, COLS-1, ROWS-1, T.WATER);
-  fill(0, 0, 3, ROWS-1, T.WATER);
-  fill(COLS-4, 0, COLS-1, ROWS-1, T.WATER);
+  // obvodové domy do výšky kolem celého náměstí (4 tlusté)
+  fill(0, 0, COLS-1, 3, T.BUILDING);
+  fill(0, ROWS-4, COLS-1, ROWS-1, T.BUILDING);
+  fill(0, 0, 3, ROWS-1, T.BUILDING);
+  fill(COLS-4, 0, COLS-1, ROWS-1, T.BUILDING);
 
-  // --- Polsko (Cieszyn) — promenáda podél řeky ---
-  fill(4, 4, 9, ROWS-5, T.POLAND);
-  courtBlock(4, 7, 6, 12);
-  courtBlock(4, 18, 6, 24);
-  courtBlock(4, 32, 6, 40);
+  // chodník podél domů (uvnitř, kolem dokola)
+  fill(4, 4, COLS-5, 4, T.SIDEWALK);
+  fill(4, ROWS-5, COLS-5, ROWS-5, T.SIDEWALK);
+  fill(4, 4, 4, ROWS-5, T.SIDEWALK);
+  fill(COLS-5, 4, COLS-5, ROWS-5, T.SIDEWALK);
 
-  // --- Řeka Olza ---
-  fill(10, 4, 12, ROWS-5, T.WATER);
-  // 3 mosty
-  fill(10, 6, 12, 7, T.BRIDGE);     // vlakový (sever)
-  fill(10, 26, 12, 27, T.BRIDGE);   // pěší (centrum)
-  fill(10, 40, 12, 41, T.BRIDGE);   // pěší (jih)
+  // vjezdy / ulice (mezery v domech) — aby náměstí dýchalo
+  fill(11, ROWS-4, 14, ROWS-1, T.ROAD);   // jižní vjezd
+  fill(0, 8, 3, 10, T.ROAD);              // západní ulička
+  fill(COLS-4, 22, COLS-1, 24, T.ROAD);   // východní ulička
 
-  // --- Český Těšín (východní strana) ---
-  const VR = [16, 24, 31];          // svislé ulice (Nábřežní, Hlavní třída, Nádražní)
-  const HR = [10, 20, 31, 43];      // vodorovné ulice
-  for (const c of VR) { fill(c-1, 4, c-1, ROWS-5, T.SIDEWALK); fill(c+1, 4, c+1, ROWS-5, T.SIDEWALK); }
-  for (const r of HR) { fill(13, r-1, COLS-5, r-1, T.SIDEWALK); fill(13, r+1, COLS-5, r+1, T.SIDEWALK); }
-  for (const c of VR) fill(c, 4, c, ROWS-5, T.ROAD);
-  for (const r of HR) fill(13, r, COLS-5, r, T.ROAD);
+  // kašna uprostřed (kolize = voda)
+  fill(12, 17, 15, 20, T.WATER);
 
-  // bloky domů s dvorky
-  const blocks = [
-    [13,5,15,9],[17,5,23,9],[25,5,30,9],[32,5,35,9],
-    [13,12,15,18],[25,12,30,18],[32,12,35,18],
-    [13,22,15,29],[17,22,23,29],[25,22,30,29],[32,22,35,29],
-    [13,33,15,41],[17,33,23,41],[32,33,35,41],
-    [13,45,15,46],[17,45,23,46],[25,45,30,46],[32,45,35,46],
-  ];
-  for (const b of blocks) courtBlock(b[0], b[1], b[2], b[3]);
-
-  // Nábřežní promenáda (x13) — spojuje všechny 3 mosty s městem
-  fill(13, 4, 13, ROWS-5, T.SIDEWALK);
-
-  // Náměstí ČSA (dlažba)
-  fill(18, 12, 22, 18, T.PLAZA);
-  // Nádraží (velká budova, jih)
-  fill(25, 33, 30, 41, T.BUILDING);
+  // --- props (vizuál) ---
+  PROPS = [];
+  // kašna (kruh přes střed vodních dlaždic)
+  PROPS.push({ type:'fountain', x:13.5, y:18.5, r:2.0 });
+  // stromy ve dvou řadách podél náměstí
+  for (let ry = 7; ry <= 30; ry += 4) {
+    PROPS.push({ type:'tree', x:6.5,  y:ry });
+    PROPS.push({ type:'tree', x:20.5, y:ry });
+  }
+  // lavičky kolem kašny
+  PROPS.push({ type:'bench', x:13.5, y:15.0, h:0 });
+  PROPS.push({ type:'bench', x:13.5, y:22.2, h:0 });
+  PROPS.push({ type:'bench', x:10.3, y:18.5, h:1 });
+  PROPS.push({ type:'bench', x:16.7, y:18.5, h:1 });
+  // řada zaparkovaných aut (jako na náhledu)
+  const carCols = ['#b13b3b','#3b6db1','#cfa92e','#4a4a4a','#2e8b57','#8a8a8a'];
+  for (let i = 0; i < 6; i++) PROPS.push({ type:'car', x:8.0, y:8 + i*1.4, col:carCols[i%carCols.length] });
+  // tržní stánky (bílé markýzy)
+  PROPS.push({ type:'stall', x:18.5, y:8.5 });
+  PROPS.push({ type:'stall', x:18.5, y:10.5 });
+  PROPS.push({ type:'stall', x:18.5, y:12.5 });
+  // lampy
+  PROPS.push({ type:'lamp', x:9, y:18.5 });
+  PROPS.push({ type:'lamp', x:18, y:18.5 });
 }
 
 // ---------- Hráč ----------
@@ -758,14 +761,8 @@ const TCOL = {
 
 // popisky míst (vypálené do mapy)
 const MAP_LABELS = [
-  { x: 20, y: 15, t: 'NÁMĚSTÍ ČSA', s: 15 },
-  { x: 20, y: 7,  t: 'RADNICE',     s: 13 },
-  { x: 27, y: 37, t: 'NÁDRAŽÍ',     s: 14 },
-  { x: 20, y: 26, t: 'HLAVNÍ TŘÍDA', s: 12, rot: -Math.PI/2, col2: '#ffe9a0' },
-  { x: 14, y: 25, t: 'KEBAB',       s: 12 },
-  { x: 28, y: 15, t: 'MUZEUM',      s: 12 },
-  { x: 6,  y: 27, t: 'POLSKO ▸ CIESZYN', s: 13, col: '#e8e0c0' },
-  { x: 11, y: 20, t: 'OLZA',        s: 12, rot: -Math.PI/2, col: '#cfe6ff' },
+  { x: 14, y: 1.6, t: 'MĚSTSKÝ ÚŘAD', s: 15, col: '#ffe9a0' },
+  { x: 13.5, y: 24, t: 'NÁMĚSTÍ ČSA', s: 13, col: '#ffffff' },
 ];
 
 // Předrenderuj celou mapu JEDNOU do offscreen plátna (pak se jen blituje).
@@ -794,16 +791,22 @@ function buildWorldCanvas() {
         g.fillRect(x + TILE/2 - 2, y + 12, 4, 16);
         g.fillRect(x + TILE/2 - 2, y + 36, 4, 16);
       } else if (t === T.BUILDING) {
-        g.fillStyle = '#6f6052'; g.fillRect(x, y, TILE, TILE);
-        if (!bUp)   { g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(x, y, TILE, 5); }
-        if (!bRight){ g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(x + TILE-6, y, 6, TILE); }
+        // červená střecha (jako reálné náměstí)
+        g.fillStyle = '#9c4f3f'; g.fillRect(x, y, TILE, TILE);
+        g.fillStyle = 'rgba(0,0,0,0.10)';
+        for (let i = 8; i < TILE; i += 12) g.fillRect(x, y + i, TILE, 2);   // tašky
+        if (!bUp)   { g.fillStyle = 'rgba(255,255,255,0.14)'; g.fillRect(x, y, TILE, 5); }
+        if (!bRight){ g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x + TILE-6, y, 6, TILE); }
         if (!bLeft) { g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(x, y, 4, TILE); }
         if (!bDown) {
-          g.fillStyle = '#574b40'; g.fillRect(x, y + TILE-16, TILE, 16);
-          g.fillStyle = 'rgba(255,225,150,0.65)';
-          g.fillRect(x + 8,  y + TILE-12, 9, 8);
-          g.fillRect(x + 24, y + TILE-12, 9, 8);
-          g.fillRect(x + 40, y + TILE-12, 9, 8);
+          // fasáda do výšky se dvěma řadami oken
+          g.fillStyle = '#d9c7a3'; g.fillRect(x, y + TILE-26, TILE, 26);
+          g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x, y + TILE-26, TILE, 2);
+          g.fillStyle = 'rgba(90,120,160,0.75)';
+          for (const wx of [6, 24, 42]) {
+            g.fillRect(x + wx, y + TILE-22, 9, 7);
+            g.fillRect(x + wx, y + TILE-11, 9, 7);
+          }
         } else {
           g.fillStyle = 'rgba(0,0,0,0.10)';
           g.fillRect(x + 10, y + 16, 12, 12);
@@ -825,6 +828,38 @@ function buildWorldCanvas() {
         g.fillStyle = 'rgba(255,255,255,0.05)';
         g.fillRect(x + 18, y + 26, 5, 5);
       }
+    }
+  }
+
+  // --- props (kašna, stromy, lavičky, auta, stánky, lampy) ---
+  for (const p of PROPS) {
+    const px = p.x * TILE, py = p.y * TILE;
+    if (p.type === 'fountain') {
+      const R = p.r * TILE;
+      g.fillStyle = '#7d7468'; g.beginPath(); g.arc(px, py, R, 0, Math.PI*2); g.fill();      // kamenný věnec
+      g.fillStyle = '#9a9086'; g.beginPath(); g.arc(px, py, R-6, 0, Math.PI*2); g.fill();
+      g.fillStyle = '#3f7fb0'; g.beginPath(); g.arc(px, py, R-14, 0, Math.PI*2); g.fill();    // voda
+      g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.arc(px, py, 6, 0, Math.PI*2); g.fill(); // tryska
+    } else if (p.type === 'tree') {
+      g.fillStyle = 'rgba(0,0,0,0.18)'; g.beginPath(); g.ellipse(px, py+14, 16, 6, 0, 0, Math.PI*2); g.fill();
+      g.fillStyle = '#2f6b2f'; g.beginPath(); g.arc(px, py, 17, 0, Math.PI*2); g.fill();
+      g.fillStyle = '#3c8a3c'; g.beginPath(); g.arc(px-5, py-5, 11, 0, Math.PI*2); g.fill();
+    } else if (p.type === 'bench') {
+      g.save(); g.translate(px, py); if (p.h) g.rotate(Math.PI/2);
+      g.fillStyle = '#6b4a2c'; g.fillRect(-16, -5, 32, 10);
+      g.fillStyle = '#5a3d24'; g.fillRect(-16, -7, 32, 3);
+      g.restore();
+    } else if (p.type === 'car') {
+      g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(px-15, py-9, 32, 22);
+      g.fillStyle = p.col; g.fillRect(px-15, py-9, 30, 20);
+      g.fillStyle = 'rgba(180,220,255,0.7)'; g.fillRect(px-12, py-5, 24, 6);
+    } else if (p.type === 'stall') {
+      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(px-20, py-12, 42, 26);
+      g.fillStyle = '#e8e8e8'; g.fillRect(px-20, py-12, 40, 24);       // bílá markýza
+      g.fillStyle = '#cc3333'; for (let i=0;i<4;i++) g.fillRect(px-20+i*10, py-12, 5, 24); // pruhy
+    } else if (p.type === 'lamp') {
+      g.fillStyle = '#333'; g.fillRect(px-2, py-2, 4, 16);
+      g.fillStyle = '#ffe9a0'; g.beginPath(); g.arc(px, py-4, 5, 0, Math.PI*2); g.fill();
     }
   }
 
