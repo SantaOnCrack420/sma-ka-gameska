@@ -198,3 +198,24 @@ body {
   color: #ffd23f;
 }
 #settingsClose:active { transform: scale(0.97); }
+
+/* výzva na šířku — viditelná jen když je telefon na výšku */
+#rotate {
+  position: fixed;
+  inset: 0;
+  background: #0e0e16;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.rbox {
+  font-family: 'Oswald', Impact, sans-serif;
+  color: #ffd23f;
+  font-size: 30px;
+  line-height: 1.6;
+  text-align: center;
+}
+@media (orientation: portrait) and (max-width: 900px) {
+  #rotate { display: flex; }
+}

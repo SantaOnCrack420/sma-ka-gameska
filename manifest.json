@@ -4,7 +4,7 @@
   "description": "Šimmy Prznič hází hranolky po holubech v Těšíně",
   "start_url": ".",
   "display": "fullscreen",
-  "orientation": "portrait",
+  "orientation": "landscape",
   "background_color": "#1a1a2e",
   "theme_color": "#1a1a2e",
   "icons": [
