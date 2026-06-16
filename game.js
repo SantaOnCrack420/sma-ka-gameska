@@ -53,16 +53,24 @@ function startMusic() {
 }
 function setMusicVol() {
   const base = (state === 'PLAYING') ? 0.5 : 1.0;   // ve hře ztlumeno pod SFX
-  music.volume = (muted || !musicOn) ? 0 : base * musicVol;
+  const v = (muted || !musicOn) ? 0 : base * musicVol;
+  if (musicGain) musicGain.gain.value = v;   // iOS: hlasitost přes GainNode
+  else music.volume = v;                     // fallback (desktop)
 }
 
-// ---------- SFX přes Web Audio API (nízká latence, žádný lag na iOS) ----------
-let actx = null;
+// ---------- SFX + hudba přes Web Audio API (iOS umí hlasitost jen takhle) ----------
+let actx = null, musicGain = null;
 const SFXBUF = {};
 const SFX_NAMES = ['click','shoot','hit','kill','pickup','hurt','boom','boss','wave','gameover'];
 function initAudio() {
   if (actx) { if (actx.state === 'suspended') actx.resume(); startMusic(); return; }
   try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) { return; }
+  // hudbu pusť přes GainNode → reálné ovládání hlasitosti i na iPhonu
+  try {
+    const srcNode = actx.createMediaElementSource(music);
+    musicGain = actx.createGain();
+    srcNode.connect(musicGain); musicGain.connect(actx.destination);
+  } catch (_) {}
   SFX_NAMES.forEach(n =>
     fetch('assets/sfx/' + n + '.wav')
       .then(r => r.arrayBuffer())
@@ -70,6 +78,7 @@ function initAudio() {
       .then(buf => { SFXBUF[n] = buf; })
       .catch(() => {}));
   startMusic();
+  setMusicVol();
 }
 function sfx(name, vol = 1) {
   if (muted || !sfxOn || !actx) return;
@@ -144,7 +153,7 @@ const musicVolSl    = document.getElementById('musicVolSl');
 const sfxVolSl      = document.getElementById('sfxVolSl');
 const lbListEl      = document.getElementById('lbList');
 const settingsClose = document.getElementById('settingsClose');
-let settingsBtn = null;   // ozubené kolo v menu (canvas)
+let settingsBtn = null, lbBtn = null;   // karty v menu (canvas)
 function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
 function renderLbList() {
   const lb = loadLB().slice(0, 10);
@@ -301,6 +310,7 @@ const joy = { active: false, id: -1, baseX: 0, baseY: 0, dx: 0, dy: 0 };
 function touchStart(x, y, id) {
   if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
   if (state === 'MENU' && nickMenuBtn && x >= nickMenuBtn.x && x <= nickMenuBtn.x+nickMenuBtn.w && y >= nickMenuBtn.y && y <= nickMenuBtn.y+nickMenuBtn.h) { showNick(); return; }
+  if (state === 'MENU' && lbBtn && x >= lbBtn.x && x <= lbBtn.x+lbBtn.w && y >= lbBtn.y && y <= lbBtn.y+lbBtn.h) { openSettings(); return; }
   if (state === 'MENU' && settingsBtn && x >= settingsBtn.x && x <= settingsBtn.x+settingsBtn.w && y >= settingsBtn.y && y <= settingsBtn.y+settingsBtn.h) { openSettings(); return; }
   if (state !== 'PLAYING') { startOrClick(); return; }
   if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) { throwSmazak(); return; }
@@ -326,6 +336,7 @@ canvas.addEventListener('mousedown', e => {
   const x = e.clientX, y = e.clientY;
   if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
   if (state === 'MENU' && nickMenuBtn && x >= nickMenuBtn.x && x <= nickMenuBtn.x+nickMenuBtn.w && y >= nickMenuBtn.y && y <= nickMenuBtn.y+nickMenuBtn.h) { showNick(); return; }
+  if (state === 'MENU' && lbBtn && x >= lbBtn.x && x <= lbBtn.x+lbBtn.w && y >= lbBtn.y && y <= lbBtn.y+lbBtn.h) { openSettings(); return; }
   if (state === 'MENU' && settingsBtn && x >= settingsBtn.x && x <= settingsBtn.x+settingsBtn.w && y >= settingsBtn.y && y <= settingsBtn.y+settingsBtn.h) { openSettings(); return; }
   if (state === 'PLAYING') {
     if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) { throwSmazak(); return; }
@@ -1114,6 +1125,33 @@ function gtaText(text, x, y, size, fill = '#ffd700', stroke = '#000', sw = 6) {
   ctx.fillStyle = fill; ctx.fillText(text, x, y);
 }
 
+// karta v menu; primary = zlatá hlavní; pressed = efekt zmáčknutí
+function menuCard(x, y, w, h, label, primary, pressed) {
+  const cx = x + w/2, cy = y + h/2;
+  const breathe = primary ? 1 + Math.sin(Date.now()/450)*0.02 : 1;
+  const press = pressed ? 1 - 0.07*(menuPress/10) : 1;
+  const sc = breathe * press;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.translate(-cx, -cy);
+  if (primary) {
+    const p = 0.5 + 0.5*Math.sin(Date.now()/400);
+    ctx.save();
+    ctx.shadowColor = `rgba(255,210,63,${0.5 + p*0.4})`;
+    ctx.shadowBlur = 22 + p*16;
+    ctx.fillStyle = pressed ? '#fff7d0' : '#ffd23f';
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 16); ctx.fill();
+    ctx.restore();
+  } else {
+    ctx.fillStyle = 'rgba(18,18,26,0.92)';
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 16); ctx.fill();
+  }
+  ctx.lineWidth = 3; ctx.strokeStyle = '#ffd23f';
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 16); ctx.stroke();
+  gtaText(label, cx, cy + 1, primary ? 30 : 23, primary ? '#1c1c12' : '#ffd23f', primary ? '#caa11f' : '#000', primary ? 2 : 4);
+  ctx.restore();
+  return { x, y, w, h };
+}
+
 function drawMenu() {
   ctx.fillStyle = '#10101c';
   ctx.fillRect(0, 0, VW, VH);
@@ -1141,35 +1179,13 @@ function drawMenu() {
   gtaText('GTA 7: TĚŠÍN CITY', VW/2, VH*0.10, titleSize, '#ffd23f', '#000', 8);
   gtaText('Smažák s Hranolkama DLC', VW/2, VH*0.10 + titleSize*0.95, titleSize*0.5, '#ffffff', '#000', 5);
 
-  // --- Tlačítko NOVÁ HRA (klikací) ---
-  const bw = Math.min(VW*0.7, 300), bh = 64;
-  const bcx = VW/2, bcy = VH*0.74 + bh/2;
-  const pulse = 0.5 + 0.5*Math.sin(Date.now()/400);
-  const breathe = 1 + Math.sin(Date.now()/450)*0.025;       // jemné „dýchání"
-  const press = pendingStart ? 1 - 0.10*(menuPress/10) : 1;  // zmáčknutí dovnitř
-  const sc = breathe * press;
-  ctx.save();
-  ctx.translate(bcx, bcy); ctx.scale(sc, sc); ctx.translate(-bcx, -bcy);
-  const bx = bcx - bw/2, by = bcy - bh/2;
-  ctx.save();
-  ctx.shadowColor = `rgba(255,210,63,${0.4+pulse*0.4})`;
-  ctx.shadowBlur = 18 + pulse*14;
-  ctx.fillStyle = pendingStart ? '#ffd23f' : '#1c1c12';     // při zmáčknutí se rozsvítí
-  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 14); ctx.fill();
-  ctx.restore();
-  ctx.lineWidth = 3; ctx.strokeStyle = '#ffd23f';
-  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 14); ctx.stroke();
-  gtaText('▶  NOVÁ HRA', bcx, bcy + 1, 30, pendingStart ? '#1c1c12' : '#ffd23f', '#000', pendingStart ? 2 : 5);
-  ctx.restore();
-  menuBtn = { x: bx, y: by, w: bw, h: bh };
-
-  // --- Tlačítko Nastavení / Top smažky (pod hlavním tlačítkem) ---
-  const stxt = '⚙️ NASTAVENÍ  ·  🏆 TOP SMAŽKY';
-  ctx.font = 'bold 15px Oswald, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const sw2 = ctx.measureText(stxt).width, syy = by + bh + 30;
-  ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.strokeText(stxt, VW/2, syy);
-  ctx.fillStyle = '#fff'; ctx.fillText(stxt, VW/2, syy);
-  settingsBtn = { x: VW/2 - sw2/2 - 10, y: syy - 16, w: sw2 + 20, h: 32 };
+  // --- 3 velké karty: NOVÁ HRA / TOP SMAŽKY / NASTAVENÍ ---
+  const cw = Math.min(VW*0.84, 360), ch = 64, gap = 16;
+  const x0 = VW/2 - cw/2;
+  let cy = VH*0.55;
+  menuBtn  = menuCard(x0, cy,            cw, ch+8, '▶  NOVÁ HRA',  true,  pendingStart);
+  lbBtn    = menuCard(x0, cy + ch+18,    cw, ch,   '🏆 TOP SMAŽKY', false, false);
+  settingsBtn = menuCard(x0, cy + 2*(ch+18), cw, ch, '⚙️ NASTAVENÍ', false, false);
 
   // --- Nick (změnit) vlevo nahoře ---
   ctx.font = `600 14px Oswald, sans-serif`;
@@ -1178,20 +1194,6 @@ function drawMenu() {
   const ntxt = '👤 ' + (nick || '—') + '  (změnit)';
   ctx.strokeText(ntxt, 14, 26); ctx.fillStyle = '#fff'; ctx.fillText(ntxt, 14, 26);
   nickMenuBtn = { x: 10, y: 12, w: ctx.measureText(ntxt).width + 12, h: 28 };
-
-  // --- TOP 3 vpravo nahoře ---
-  const lb = loadLB().slice(0, 3);
-  if (lb.length) {
-    ctx.textAlign = 'right';
-    ctx.lineWidth = 3; ctx.strokeStyle = '#000';
-    ctx.font = 'bold 14px Oswald, sans-serif';
-    ctx.strokeText('🏆 TOP SMAŽKY', VW-14, 22); ctx.fillStyle = '#ffd23f'; ctx.fillText('🏆 TOP SMAŽKY', VW-14, 22);
-    ctx.font = '600 13px Oswald, sans-serif';
-    lb.forEach((e, i) => {
-      const t = `${i+1}. ${e.name} — ${e.score}`;
-      ctx.strokeText(t, VW-14, 42 + i*18); ctx.fillStyle = '#fff'; ctx.fillText(t, VW-14, 42 + i*18);
-    });
-  }
 
   // --- Disclaimer dole ---
   ctx.font = `600 ${Math.min(VW*0.032,13)}px Oswald, sans-serif`;
