@@ -182,18 +182,18 @@ const scoreEl = document.getElementById('score');
 const livesEl = document.getElementById('lives');
 function showHud(on) { if (ui) ui.style.display = on ? 'flex' : 'none'; }
 
-// ---------- Svět (Náměstí ČSA, Český Těšín) ----------
+// ---------- Svět (reálný Český Těšín z OpenStreetMap) ----------
 const TILE = 64;
-const COLS = 28, ROWS = 38;
+const COLS = MAP_COLS, ROWS = MAP_ROWS;
 const WPX = COLS * TILE;
 const WPY = ROWS * TILE;
 
 const T = { GRASS:0, ROAD:1, SIDEWALK:2, BUILDING:3, PLAZA:4, WATER:5, BRIDGE:6, POLAND:7 };
 const SOLID = new Set([T.BUILDING, T.WATER]);
 
-// startovní bod = na dlažbě jižně od kašny
-const SPAWN_WX = 9 * TILE + 32;
-const SPAWN_WY = 26 * TILE + 32;
+// start = Náměstí ČSA
+const SPAWN_WX = MAP_SPAWN[0] * TILE + 32;
+const SPAWN_WY = MAP_SPAWN[1] * TILE + 32;
 
 let map = new Int8Array(COLS * ROWS);
 const at = (c, r) => map[r * COLS + c];
@@ -203,67 +203,19 @@ function fill(c0, r0, c1, r1, t) {
       if (c >= 0 && c < COLS && r >= 0 && r < ROWS) map[r * COLS + c] = t;
 }
 
-// blok domů jen po obvodu, vnitřek = dvorek (pokud je dost velký)
-function courtBlock(c0, r0, c1, r1) {
-  for (let r = r0; r <= r1; r++)
-    for (let c = c0; c <= c1; c++) {
-      if (at(c, r) !== T.GRASS) continue;
-      const edge = (c === c0 || c === c1 || r === r0 || r === r1);
-      const bigEnough = (c1 - c0 >= 3 && r1 - r0 >= 3);
-      if (edge || !bigEnough) map[r * COLS + c] = T.BUILDING;
-    }
-}
-
-// props na náměstí (kreslené do mapy; kašna má kolizi přes WATER dlaždice)
+// props (zatím prázdné — město přijde z OSM; dekorace přidáme později)
 let PROPS = [];
 
+// dekóduj mapu z RLE (MAP_RLE: písmeno A.. = dlaždice 0.., následované počtem)
 function buildMap() {
-  map.fill(T.PLAZA);     // celé náměstí = dlažba
-
-  // obvodové domy do výšky kolem celého náměstí (4 tlusté)
-  fill(0, 0, COLS-1, 3, T.BUILDING);
-  fill(0, ROWS-4, COLS-1, ROWS-1, T.BUILDING);
-  fill(0, 0, 3, ROWS-1, T.BUILDING);
-  fill(COLS-4, 0, COLS-1, ROWS-1, T.BUILDING);
-
-  // chodník podél domů (uvnitř, kolem dokola)
-  fill(4, 4, COLS-5, 4, T.SIDEWALK);
-  fill(4, ROWS-5, COLS-5, ROWS-5, T.SIDEWALK);
-  fill(4, 4, 4, ROWS-5, T.SIDEWALK);
-  fill(COLS-5, 4, COLS-5, ROWS-5, T.SIDEWALK);
-
-  // vjezdy / ulice (mezery v domech) — aby náměstí dýchalo
-  fill(11, ROWS-4, 14, ROWS-1, T.ROAD);   // jižní vjezd
-  fill(0, 8, 3, 10, T.ROAD);              // západní ulička
-  fill(COLS-4, 22, COLS-1, 24, T.ROAD);   // východní ulička
-
-  // kašna uprostřed (kolize = voda)
-  fill(12, 17, 15, 20, T.WATER);
-
-  // --- props (vizuál) ---
-  PROPS = [];
-  // kašna (kruh přes střed vodních dlaždic)
-  PROPS.push({ type:'fountain', x:13.5, y:18.5, r:2.0 });
-  // stromy ve dvou řadách podél náměstí
-  for (let ry = 7; ry <= 30; ry += 4) {
-    PROPS.push({ type:'tree', x:6.5,  y:ry });
-    PROPS.push({ type:'tree', x:20.5, y:ry });
+  let i = 0, idx = 0;
+  const s = MAP_RLE, n = s.length;
+  while (i < n) {
+    const val = s.charCodeAt(i) - 65; i++;
+    let num = 0;
+    while (i < n && s.charCodeAt(i) >= 48 && s.charCodeAt(i) <= 57) { num = num*10 + (s.charCodeAt(i)-48); i++; }
+    for (let k = 0; k < num && idx < map.length; k++) map[idx++] = val;
   }
-  // lavičky kolem kašny
-  PROPS.push({ type:'bench', x:13.5, y:15.0, h:0 });
-  PROPS.push({ type:'bench', x:13.5, y:22.2, h:0 });
-  PROPS.push({ type:'bench', x:10.3, y:18.5, h:1 });
-  PROPS.push({ type:'bench', x:16.7, y:18.5, h:1 });
-  // řada zaparkovaných aut (jako na náhledu)
-  const carCols = ['#b13b3b','#3b6db1','#cfa92e','#4a4a4a','#2e8b57','#8a8a8a'];
-  for (let i = 0; i < 6; i++) PROPS.push({ type:'car', x:8.0, y:8 + i*1.4, col:carCols[i%carCols.length] });
-  // tržní stánky (bílé markýzy)
-  PROPS.push({ type:'stall', x:18.5, y:8.5 });
-  PROPS.push({ type:'stall', x:18.5, y:10.5 });
-  PROPS.push({ type:'stall', x:18.5, y:12.5 });
-  // lampy
-  PROPS.push({ type:'lamp', x:9, y:18.5 });
-  PROPS.push({ type:'lamp', x:18, y:18.5 });
 }
 
 // ---------- Hráč ----------
@@ -749,10 +701,10 @@ const TCOL = {
   [T.POLAND]:  '#6f7c46',
 };
 
-// popisky míst (vypálené do mapy)
+// popisky míst (souřadnice v dlaždicích reálné mapy)
 const MAP_LABELS = [
-  { x: 14, y: 1.6, t: 'MĚSTSKÝ ÚŘAD', s: 15, col: '#ffe9a0' },
-  { x: 13.5, y: 24, t: 'NÁMĚSTÍ ČSA', s: 13, col: '#ffffff' },
+  { x: MAP_SPAWN[0], y: MAP_SPAWN[1] - 2, t: 'NÁMĚSTÍ ČSA', s: 18, col: '#ffffff' },
+  { x: 30, y: 150, t: '◂ POLSKO / CIESZYN', s: 16, col: '#e8e0c0' },
 ];
 
 const isB = (c, r) => c >= 0 && c < COLS && r >= 0 && r < ROWS && at(c, r) === T.BUILDING;
@@ -1216,6 +1168,8 @@ function drawMenu() {
   ctx.fillStyle = 'rgba(255,255,255,0.65)';
   ctx.fillText('Všechny události, postavy a místa jsou fiktivní.', VW/2, VH - 42);
   ctx.fillText('Jakákoliv podobnost se skutečnými osobami je čistě náhodná. xd', VW/2, VH - 24);
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.fillText('Mapa © OpenStreetMap contributors', VW/2, VH - 10);
 }
 
 function wrapText(text, maxW, font) {
