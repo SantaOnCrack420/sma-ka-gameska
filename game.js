@@ -186,7 +186,7 @@ function showHud(on) { if (ui) ui.style.display = on ? 'flex' : 'none'; }
 
 // ---------- Svět (reálný Český Těšín — obrázek + kolize z OSM) ----------
 const WPX = MAP_IMG_W, WPY = MAP_IMG_H;   // svět = pixely mapy
-const ZOOM = 4.5;                          // přiblížení na úroveň chůze (laditelné)
+const ZOOM = 2.1;                          // přiblížení (mapa je teď ve velkém měřítku 3,6 px/m)
 const COMBAT = false;                      // Fáze A = procházka; ve Fázi B zapnout boj
 const SPAWN_WX = SPAWN_PX[0];
 const SPAWN_WY = SPAWN_PX[1];
@@ -211,7 +211,7 @@ const player = {
   wx: SPAWN_WX,
   wy: SPAWN_WY,
   vx: 0, vy: 0,
-  speed: 0.5,
+  speed: 0.28,
   angle: 0,
 };
 
@@ -708,9 +708,9 @@ function drawPlayer() {
   if (charReady) {
     const moving = Math.hypot(player.vx, player.vy) > 0.4;
     const bob = moving ? Math.sin(Date.now()/110) * 1.5 : 0;
-    const H = 44, W = H * (charImg.width / charImg.height);
+    const H = 30, W = H * (charImg.width / charImg.height);   // lidská velikost vůči baráku
     ctx.scale(facing, 1);                       // překlopení vlevo/vpravo
-    ctx.drawImage(charImg, -W/2, -H + 16 + bob, W, H);
+    ctx.drawImage(charImg, -W/2, -H + 11 + bob, W, H);
   } else {
     // fallback než se sprite načte
     ctx.fillStyle = '#2d3340';
