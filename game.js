@@ -591,70 +591,71 @@ const TCOL = {
   [T.WATER]:   '#2f6a8f',
 };
 
-function drawMap() {
-  const halfW = VW/2, halfH = VH/2;
-  const startC = Math.floor((cam.x - halfW)/TILE) - 1;
-  const endC   = Math.floor((cam.x + halfW)/TILE) + 1;
-  const startR = Math.floor((cam.y - halfH)/TILE) - 1;
-  const endR   = Math.floor((cam.y + halfH)/TILE) + 1;
+// Předrenderuj celou mapu JEDNOU do offscreen plátna (pak se jen blituje).
+let worldCanvas = null;
+function buildWorldCanvas() {
+  worldCanvas = document.createElement('canvas');
+  worldCanvas.width = WPX; worldCanvas.height = WPY;
+  const g = worldCanvas.getContext('2d');
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const t = at(c, r);
+      const x = c*TILE, y = r*TILE;
+      const bUp    = at(c, (r-1+ROWS)%ROWS) === T.BUILDING;
+      const bDown  = at(c, (r+1)%ROWS)      === T.BUILDING;
+      const bLeft  = at((c-1+COLS)%COLS, r)  === T.BUILDING;
+      const bRight = at((c+1)%COLS, r)       === T.BUILDING;
 
-  for (let r = startR; r <= endR; r++) {
-    for (let c = startC; c <= endC; c++) {
-      const cc = ((c % COLS) + COLS) % COLS;
-      const rr = ((r % ROWS) + ROWS) % ROWS;
-      const t = at(cc, rr);
-      const [sx, sy] = wts(c*TILE + TILE/2, r*TILE + TILE/2);
-      const x = sx - TILE/2, y = sy - TILE/2;
-      const bUp    = at(cc, (rr-1+ROWS)%ROWS) === T.BUILDING;
-      const bDown  = at(cc, (rr+1)%ROWS)      === T.BUILDING;
-      const bLeft  = at((cc-1+COLS)%COLS, rr)  === T.BUILDING;
-      const bRight = at((cc+1)%COLS, rr)       === T.BUILDING;
+      g.fillStyle = TCOL[t];
+      g.fillRect(x, y, TILE, TILE);
 
-      ctx.fillStyle = TCOL[t];
-      ctx.fillRect(x, y, TILE, TILE);
-
-      // stín vržený budovou na sousední zem (dolů)
       if (t !== T.BUILDING && bUp) {
-        ctx.fillStyle = 'rgba(0,0,0,0.28)';
-        ctx.fillRect(x, y, TILE, 9);
+        g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x, y, TILE, 9);
       }
-
       if (t === T.ROAD) {
-        ctx.fillStyle = 'rgba(255,210,80,0.5)';
-        ctx.fillRect(x + TILE/2 - 2, y + 12, 4, 16);
-        ctx.fillRect(x + TILE/2 - 2, y + 36, 4, 16);
+        g.fillStyle = 'rgba(255,210,80,0.5)';
+        g.fillRect(x + TILE/2 - 2, y + 12, 4, 16);
+        g.fillRect(x + TILE/2 - 2, y + 36, 4, 16);
       } else if (t === T.BUILDING) {
-        // střecha
-        ctx.fillStyle = '#6f6052'; ctx.fillRect(x, y, TILE, TILE);
-        // horní světlá hrana (světlo shora)
-        if (!bUp)   { ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(x, y, TILE, 5); }
-        // boční stíny (zaoblení bloku)
-        if (!bRight){ ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(x + TILE-6, y, 6, TILE); }
-        if (!bLeft) { ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x, y, 4, TILE); }
-        // fasáda + okna na spodní hraně (kde je vidět zeď)
+        g.fillStyle = '#6f6052'; g.fillRect(x, y, TILE, TILE);
+        if (!bUp)   { g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(x, y, TILE, 5); }
+        if (!bRight){ g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(x + TILE-6, y, 6, TILE); }
+        if (!bLeft) { g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(x, y, 4, TILE); }
         if (!bDown) {
-          ctx.fillStyle = '#574b40'; ctx.fillRect(x, y + TILE-16, TILE, 16);
-          ctx.fillStyle = 'rgba(255,225,150,0.65)';
-          ctx.fillRect(x + 8,  y + TILE-12, 9, 8);
-          ctx.fillRect(x + 24, y + TILE-12, 9, 8);
-          ctx.fillRect(x + 40, y + TILE-12, 9, 8);
+          g.fillStyle = '#574b40'; g.fillRect(x, y + TILE-16, TILE, 16);
+          g.fillStyle = 'rgba(255,225,150,0.65)';
+          g.fillRect(x + 8,  y + TILE-12, 9, 8);
+          g.fillRect(x + 24, y + TILE-12, 9, 8);
+          g.fillRect(x + 40, y + TILE-12, 9, 8);
         } else {
-          // okna na střeše/zdi vnitřních dílů
-          ctx.fillStyle = 'rgba(0,0,0,0.10)';
-          ctx.fillRect(x + 10, y + 16, 12, 12);
-          ctx.fillRect(x + 34, y + 16, 12, 12);
+          g.fillStyle = 'rgba(0,0,0,0.10)';
+          g.fillRect(x + 10, y + 16, 12, 12);
+          g.fillRect(x + 34, y + 16, 12, 12);
         }
       } else if (t === T.GRASS) {
-        ctx.fillStyle = 'rgba(0,0,0,0.06)';
-        ctx.fillRect(x + 14, y + 20, 4, 4);
-        ctx.fillRect(x + 40, y + 44, 4, 4);
+        g.fillStyle = 'rgba(0,0,0,0.06)';
+        g.fillRect(x + 14, y + 20, 4, 4);
+        g.fillRect(x + 40, y + 44, 4, 4);
       } else if (t === T.WATER) {
-        ctx.fillStyle = 'rgba(255,255,255,0.10)';
-        ctx.fillRect(x + 8, y + 20, 20, 3);
-        ctx.fillRect(x + 30, y + 40, 20, 3);
+        g.fillStyle = 'rgba(255,255,255,0.10)';
+        g.fillRect(x + 8, y + 20, 20, 3);
+        g.fillRect(x + 30, y + 40, 20, 3);
       }
     }
   }
+}
+
+function drawMap() {
+  if (!worldCanvas) buildWorldCanvas();
+  // blit předrenderované mapy s wrapem; celá čísla = žádné švy/blikání
+  const ox = Math.round(VW/2 - cam.x);
+  const oy = Math.round(VH/2 - cam.y);
+  for (let gx = -1; gx <= 1; gx++)
+    for (let gy = -1; gy <= 1; gy++) {
+      const dx = ox + gx*WPX, dy = oy + gy*WPY;
+      if (dx < VW && dx + WPX > 0 && dy < VH && dy + WPY > 0)
+        ctx.drawImage(worldCanvas, dx, dy);
+    }
 }
 
 function drawPlayer() {
@@ -831,7 +832,7 @@ function drawBanner() {
 }
 
 function drawFryBtn() {
-  const r = 46, x = VW - r - 20, y = VH - r - 24;
+  const r = 46, x = VW - r - 20, y = VH - r - 120;
   fryBtn = { x, y, r };
   ctx.globalAlpha = firing ? 1 : 0.9;
   ctx.fillStyle = firing ? '#ffd23f' : '#c0392b';
@@ -845,7 +846,7 @@ function drawFryBtn() {
 }
 
 function drawSmazakBtn() {
-  const r = 34, x = VW - r - 30, y = VH - 200;
+  const r = 34, x = VW - r - 36, y = VH - 290;
   smazakBtn = { x, y, r };
   const ready = smazakCd <= 0;
   ctx.globalAlpha = ready ? 0.9 : 0.4;
@@ -1045,7 +1046,7 @@ function loop() {
   } else {
     // screen shake: posuň svět (ne UI) podle trauma²
     const s = trauma * trauma * 16;
-    const shx = (Math.random()*2-1) * s, shy = (Math.random()*2-1) * s;
+    const shx = Math.round((Math.random()*2-1) * s), shy = Math.round((Math.random()*2-1) * s);
     ctx.save();
     ctx.translate(shx, shy);
     drawMap();
