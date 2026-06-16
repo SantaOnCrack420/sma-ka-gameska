@@ -27,8 +27,10 @@ resize();
 // ---------- Assets ----------
 const charImg = new Image(); charImg.src = 'assets/simmy_char.png';
 const menuBg  = new Image(); menuBg.src  = 'assets/menu_bg.png';
+const mapImg  = new Image(); mapImg.src  = 'assets/map.png';
 let charReady = false; charImg.onload = () => charReady = true;
 let menuReady = false; menuBg.onload  = () => menuReady = true;
+let mapReady  = false; mapImg.onload  = () => mapReady  = true;
 
 // ---------- Nastavení zvuku (perzistované) ----------
 let musicOn  = localStorage.getItem('smazak_musicOn') !== '0';
@@ -182,90 +184,26 @@ const scoreEl = document.getElementById('score');
 const livesEl = document.getElementById('lives');
 function showHud(on) { if (ui) ui.style.display = on ? 'flex' : 'none'; }
 
-// ---------- Svět (stylizovaný Český Těšín — ruční návrh pro hratelnost) ----------
-const TILE = 64;
-const COLS = 44, ROWS = 58;
-const WPX = COLS * TILE;
-const WPY = ROWS * TILE;
+// ---------- Svět (reálný Český Těšín — obrázek + kolize z OSM) ----------
+const WPX = MAP_IMG_W, WPY = MAP_IMG_H;   // svět = pixely mapy
+const ZOOM = 3.0;                          // přiblížení na úroveň chůze (laditelné)
+const COMBAT = false;                      // Fáze A = procházka; ve Fázi B zapnout boj
+const SPAWN_WX = SPAWN_PX[0];
+const SPAWN_WY = SPAWN_PX[1];
 
-const T = { GRASS:0, ROAD:1, SIDEWALK:2, BUILDING:3, PLAZA:4, WATER:5, BRIDGE:6, POLAND:7 };
-const SOLID = new Set([T.BUILDING, T.WATER]);
+let PROPS = [];               // dekorace přijdou později
+let COL = null;               // kolizní mřížka (1 = zeď)
 
-// start = Náměstí ČSA (na dlažbě, vedle kašny)
-const SPAWN_WX = 20 * TILE + 32;
-const SPAWN_WY = 16 * TILE + 32;
-
-let map = new Int8Array(COLS * ROWS);
-const at = (c, r) => map[r * COLS + c];
-function fill(c0, r0, c1, r1, t) {
-  for (let r = r0; r <= r1; r++)
-    for (let c = c0; c <= c1; c++)
-      if (c >= 0 && c < COLS && r >= 0 && r < ROWS) map[r * COLS + c] = t;
-}
-// silnice se širokým chodníkem podél (čitelná ulice)
-function vRoad(c, r0, r1) { fill(c-2, r0, c-2, r1, T.SIDEWALK); fill(c+1, r0, c+1, r1, T.SIDEWALK); fill(c-1, r0, c, r1, T.ROAD); }
-function hRoad(r, c0, c1) { fill(c0, r-2, c1, r-2, T.SIDEWALK); fill(c0, r+1, c1, r+1, T.SIDEWALK); fill(c0, r-1, c1, r, T.ROAD); }
-// blok domů s dvorkem (okraj barák, vnitřek tráva)
-function block(c0, r0, c1, r1) {
-  for (let r = r0; r <= r1; r++)
-    for (let c = c0; c <= c1; c++) {
-      if (at(c, r) !== T.GRASS) continue;
-      const edge = (c === c0 || c === c1 || r === r0 || r === r1);
-      const big = (c1 - c0 >= 3 && r1 - r0 >= 3);
-      if (edge || !big) map[r * COLS + c] = T.BUILDING;
-    }
-}
-
-let PROPS = [];
-
+// dekóduj kolize z RLE (Z = zeď, O = pochozí, + počet)
 function buildMap() {
-  map.fill(T.GRASS);
-
-  // okraj = voda (hranice mapy)
-  fill(0, 0, COLS-1, 1, T.WATER); fill(0, ROWS-2, COLS-1, ROWS-1, T.WATER);
-  fill(0, 0, 1, ROWS-1, T.WATER); fill(COLS-2, 0, COLS-1, ROWS-1, T.WATER);
-
-  // --- Polsko / Cieszyn (západní břeh) ---
-  fill(2, 2, 9, ROWS-3, T.POLAND);
-  block(2, 5, 5, 11); block(2, 16, 5, 23); block(2, 30, 5, 39); block(2, 44, 5, 52);
-
-  // --- řeka Olza + 3 mosty ---
-  fill(10, 2, 12, ROWS-3, T.WATER);
-  fill(10, 8, 12, 9, T.BRIDGE);     // vlakový (sever)
-  fill(10, 28, 12, 29, T.BRIDGE);   // pěší (centrum)
-  fill(10, 46, 12, 47, T.BRIDGE);   // pěší (jih)
-
-  // --- Český Těšín: přehledná uliční síť ---
-  vRoad(16, 2, ROWS-3);   // Nábřežní
-  vRoad(31, 2, ROWS-3);   // Hlavní třída
-  vRoad(39, 2, ROWS-3);   // Nádražní
-  hRoad(11, 14, COLS-3);
-  hRoad(25, 14, COLS-3);
-  hRoad(39, 14, COLS-3);
-  hRoad(51, 14, COLS-3);
-
-  // --- bloky domů s dvorky ---
-  block(14, 3, 14, 9); block(19, 3, 28, 9); block(34, 3, 37, 9); block(42, 3, 42, 9);
-  block(14, 14, 14, 23); block(34, 14, 37, 23); block(42, 14, 42, 23);
-  block(14, 28, 14, 37); block(19, 28, 28, 37); block(34, 28, 37, 37); block(42, 28, 42, 37);
-  block(14, 42, 14, 49); block(19, 42, 28, 49); block(34, 42, 37, 49); block(42, 42, 42, 49);
-
-  // --- Náměstí ČSA (otevřená dlažba) ---
-  fill(19, 14, 28, 23, T.PLAZA);
-  // kašna uprostřed (kolize)
-  fill(23, 18, 24, 19, T.WATER);
-  // Radnice (sever náměstí) + Nádraží (jih)
-  fill(20, 28, 27, 31, T.BUILDING);   // Radnice/úřad blok
-  fill(34, 44, 37, 49, T.BUILDING);   // Nádraží
-
-  // --- props ---
-  PROPS = [];
-  PROPS.push({ type:'fountain', x:23.5, y:18.5, r:1.3 });
-  for (let ry = 15; ry <= 22; ry += 3) { PROPS.push({ type:'tree', x:20, y:ry }); PROPS.push({ type:'tree', x:27, y:ry }); }
-  PROPS.push({ type:'bench', x:23.5, y:16, h:0 }); PROPS.push({ type:'bench', x:23.5, y:21.5, h:0 });
-  PROPS.push({ type:'stall', x:25.5, y:15 }); PROPS.push({ type:'stall', x:25.5, y:22 });
-  const cc = ['#b13b3b','#3b6db1','#cfa92e','#4a4a4a'];
-  for (let i = 0; i < 4; i++) PROPS.push({ type:'car', x:30, y:13 + i*1.4, col:cc[i] });
+  COL = new Uint8Array(COL_W * COL_H);
+  let i = 0, idx = 0; const s = COL_RLE, n = s.length;
+  while (i < n) {
+    const v = s.charCodeAt(i) === 90 ? 1 : 0; i++;   // 'Z'=90
+    let num = 0;
+    while (i < n && s.charCodeAt(i) >= 48 && s.charCodeAt(i) <= 57) { num = num*10 + (s.charCodeAt(i)-48); i++; }
+    for (let k = 0; k < num && idx < COL.length; k++) COL[idx++] = v;
+  }
 }
 
 // ---------- Hráč ----------
@@ -273,7 +211,7 @@ const player = {
   wx: SPAWN_WX,
   wy: SPAWN_WY,
   vx: 0, vy: 0,
-  speed: 3.4,
+  speed: 1.7,
   angle: 0,
 };
 
@@ -284,18 +222,18 @@ const clamp = (v, lo, hi) => v < lo ? lo : (v > hi ? hi : v);
 // kamera se drží v hranicích mapy (na kraji se zastaví), ale když je
 // obrazovka větší než svět, vystředí se.
 function updateCam() {
-  cam.x = WPX > VW ? clamp(player.wx, VW/2, WPX - VW/2) : WPX/2;
-  cam.y = WPY > VH ? clamp(player.wy, VH/2, WPY - VH/2) : WPY/2;
+  const hw = VW/(2*ZOOM), hh = VH/(2*ZOOM);   // půl-výřezu ve světových px (kvůli zoomu)
+  cam.x = WPX > 2*hw ? clamp(player.wx, hw, WPX - hw) : WPX/2;
+  cam.y = WPY > 2*hh ? clamp(player.wy, hh, WPY - hh) : WPY/2;
 }
-// svět → obrazovka (ohraničený, bez wrapu)
-function wts(wx, wy) { return [VW/2 + (wx - cam.x), VH/2 + (wy - cam.y)]; }
-// vzdálenost (bez wrapu)
+// svět → obrazovka (se zoomem)
+function wts(wx, wy) { return [VW/2 + (wx - cam.x)*ZOOM, VH/2 + (wy - cam.y)*ZOOM]; }
 function wdist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
-// mimo mapu = zeď
+// kolize z mřížky; mimo mapu = zeď
 function isSolidAt(wx, wy) {
-  const c = Math.floor(wx / TILE), r = Math.floor(wy / TILE);
-  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return true;
-  return SOLID.has(at(c, r));
+  const gx = Math.floor(wx / COL_CELL), gy = Math.floor(wy / COL_CELL);
+  if (gx < 0 || gx >= COL_W || gy < 0 || gy >= COL_H) return true;
+  return COL[gy * COL_W + gx] === 1;
 }
 
 // ---------- Vstup ----------
@@ -349,8 +287,6 @@ canvas.addEventListener('mousedown', e => {
 window.addEventListener('mouseup', () => { firing = false; });
 
 // ---------- Herní stav ----------
-const PLAZA_WX = 19.5 * TILE;   // střed Náměstí Míru (cogani)
-const PLAZA_WY = 19.5 * TILE;
 
 let state = 'MENU';
 let menuBtn = null;
@@ -400,8 +336,7 @@ function startGame() {
   player.wx = SPAWN_WX; player.wy = SPAWN_WY;
   player.vx = 0; player.vy = 0; player.boostT = 0;
   updateCam();
-  for (let i = 0; i < 8; i++) spawnPigeon();
-  for (let i = 0; i < 4; i++) spawnBag();
+  // Fáze A = čistá procházka po reálném Těšíně (nepřátelé přijdou ve Fázi B)
   showHud(true);
   updateHud();
   setMusicVol();   // ztlum hudbu na 50 %
@@ -708,12 +643,14 @@ function update() {
   }
   smazaks = smazaks.filter(s => !s.dead);
 
-  // --- řízení vln ---
-  if (waveState === 'FIGHT') {
-    if (cogani.length === 0 && !boss) onWaveCleared();
-  } else {
-    breakT--;
-    if (breakT <= 0) startNextWave();
+  // --- řízení vln (Fáze A vypnuto — boj přijde ve Fázi B) ---
+  if (COMBAT) {
+    if (waveState === 'FIGHT') {
+      if (cogani.length === 0 && !boss) onWaveCleared();
+    } else {
+      breakT--;
+      if (breakT <= 0) startNextWave();
+    }
   }
 
   // --- pytlíky párno (sběr) ---
@@ -740,141 +677,16 @@ function update() {
 }
 
 // ---------- Vykreslení ----------
-const TCOL = {
-  [T.GRASS]:   '#4a7c3a',
-  [T.ROAD]:    '#33333a',
-  [T.SIDEWALK]:'#8d8d84',
-  [T.BUILDING]:'#6b5d4f',
-  [T.PLAZA]:   '#9a9086',
-  [T.WATER]:   '#2f6a8f',
-  [T.BRIDGE]:  '#8a7b5e',
-  [T.POLAND]:  '#6f7c46',
-};
-
-// popisky míst (souřadnice v dlaždicích)
-const MAP_LABELS = [
-  { x: 23.5, y: 18.5, t: 'NÁMĚSTÍ ČSA', s: 16, col: '#ffffff' },
-  { x: 23, y: 29.5, t: 'RADNICE', s: 13, col: '#ffe9a0' },
-  { x: 35, y: 46.5, t: 'NÁDRAŽÍ', s: 13, col: '#ffe9a0' },
-  { x: 31, y: 34, t: 'HLAVNÍ TŘÍDA', s: 12, rot: -Math.PI/2, col: '#ffe9a0' },
-  { x: 6, y: 28, t: 'POLSKO', s: 15, rot: -Math.PI/2, col: '#e8e0c0' },
-  { x: 11, y: 20, t: 'OLZA', s: 12, rot: -Math.PI/2, col: '#cfe6ff' },
-];
-
-const isB = (c, r) => c >= 0 && c < COLS && r >= 0 && r < ROWS && at(c, r) === T.BUILDING;
-
-// vykresli JEDNU dlaždici na screen pozici x,y (celá čísla)
-function paintTile(g, c, r, x, y) {
-  const t = at(c, r);
-  const bUp = isB(c, r-1), bDown = isB(c, r+1), bLeft = isB(c-1, r), bRight = isB(c+1, r);
-
-  g.fillStyle = TCOL[t];
-  g.fillRect(x, y, TILE, TILE);
-
-  if (t !== T.BUILDING && bUp) {
-    g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x, y, TILE, 9);
-  }
-  if (t === T.ROAD) {
-    g.fillStyle = 'rgba(255,210,80,0.5)';
-    g.fillRect(x + TILE/2 - 2, y + 12, 4, 16);
-    g.fillRect(x + TILE/2 - 2, y + 36, 4, 16);
-  } else if (t === T.BUILDING) {
-    g.fillStyle = '#9c4f3f'; g.fillRect(x, y, TILE, TILE);     // červená střecha
-    g.fillStyle = 'rgba(0,0,0,0.10)';
-    for (let i = 8; i < TILE; i += 12) g.fillRect(x, y + i, TILE, 2);
-    if (!bUp)   { g.fillStyle = 'rgba(255,255,255,0.14)'; g.fillRect(x, y, TILE, 5); }
-    if (!bRight){ g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x + TILE-6, y, 6, TILE); }
-    if (!bLeft) { g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(x, y, 4, TILE); }
-    if (!bDown) {
-      g.fillStyle = '#d9c7a3'; g.fillRect(x, y + TILE-26, TILE, 26);
-      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x, y + TILE-26, TILE, 2);
-      g.fillStyle = 'rgba(90,120,160,0.75)';
-      for (const wx of [6, 24, 42]) {
-        g.fillRect(x + wx, y + TILE-22, 9, 7);
-        g.fillRect(x + wx, y + TILE-11, 9, 7);
-      }
-    } else {
-      g.fillStyle = 'rgba(0,0,0,0.10)';
-      g.fillRect(x + 10, y + 16, 12, 12);
-      g.fillRect(x + 34, y + 16, 12, 12);
-    }
-  } else if (t === T.GRASS) {
-    g.fillStyle = 'rgba(0,0,0,0.06)';
-    g.fillRect(x + 14, y + 20, 4, 4);
-    g.fillRect(x + 40, y + 44, 4, 4);
-  } else if (t === T.WATER) {
-    g.fillStyle = 'rgba(255,255,255,0.10)';
-    g.fillRect(x + 8, y + 20, 20, 3);
-    g.fillRect(x + 30, y + 40, 20, 3);
-  } else if (t === T.BRIDGE) {
-    g.fillStyle = 'rgba(0,0,0,0.25)';
-    for (let i = 0; i < TILE; i += 10) g.fillRect(x, y + i, TILE, 2);
-    g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x, y, 3, TILE); g.fillRect(x+TILE-3, y, 3, TILE);
-  } else if (t === T.POLAND) {
-    g.fillStyle = 'rgba(255,255,255,0.05)';
-    g.fillRect(x + 18, y + 26, 5, 5);
-  }
-}
-
-function drawProp(p) {
-  const [x, y] = wts(p.x*TILE, p.y*TILE);
-  if (x < -60 || x > VW+60 || y < -60 || y > VH+60) return;
-  const g = ctx; g.save(); g.translate(x, y);
-  if (p.type === 'fountain') {
-    const R = p.r * TILE;
-    g.fillStyle = '#7d7468'; g.beginPath(); g.arc(0, 0, R, 0, Math.PI*2); g.fill();
-    g.fillStyle = '#9a9086'; g.beginPath(); g.arc(0, 0, R-6, 0, Math.PI*2); g.fill();
-    g.fillStyle = '#3f7fb0'; g.beginPath(); g.arc(0, 0, R-14, 0, Math.PI*2); g.fill();
-    g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.arc(0, 0, 6, 0, Math.PI*2); g.fill();
-  } else if (p.type === 'tree') {
-    g.fillStyle = 'rgba(0,0,0,0.18)'; g.beginPath(); g.ellipse(0, 14, 16, 6, 0, 0, Math.PI*2); g.fill();
-    g.fillStyle = '#2f6b2f'; g.beginPath(); g.arc(0, 0, 17, 0, Math.PI*2); g.fill();
-    g.fillStyle = '#3c8a3c'; g.beginPath(); g.arc(-5, -5, 11, 0, Math.PI*2); g.fill();
-  } else if (p.type === 'bench') {
-    if (p.h) g.rotate(Math.PI/2);
-    g.fillStyle = '#6b4a2c'; g.fillRect(-16, -5, 32, 10);
-    g.fillStyle = '#5a3d24'; g.fillRect(-16, -7, 32, 3);
-  } else if (p.type === 'car') {
-    g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(-15, -9, 32, 22);
-    g.fillStyle = p.col; g.fillRect(-15, -9, 30, 20);
-    g.fillStyle = 'rgba(180,220,255,0.7)'; g.fillRect(-12, -5, 24, 6);
-  } else if (p.type === 'stall') {
-    g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(-20, -12, 42, 26);
-    g.fillStyle = '#e8e8e8'; g.fillRect(-20, -12, 40, 24);
-    g.fillStyle = '#cc3333'; for (let i=0;i<4;i++) g.fillRect(-20+i*10, -12, 5, 24);
-  } else if (p.type === 'lamp') {
-    g.fillStyle = '#333'; g.fillRect(-2, -2, 4, 16);
-    g.fillStyle = '#ffe9a0'; g.beginPath(); g.arc(0, -4, 5, 0, Math.PI*2); g.fill();
-  }
-  g.restore();
-}
-
-function drawLabel(L) {
-  const [x, y] = wts(L.x*TILE + TILE/2, L.y*TILE + TILE/2);
-  if (x < -120 || x > VW+120 || y < -40 || y > VH+40) return;
-  ctx.save(); ctx.translate(x, y); if (L.rot) ctx.rotate(L.rot);
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `bold ${L.s}px Oswald, Impact, sans-serif`;
-  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText(L.t, 0, 0);
-  ctx.fillStyle = L.col || '#ffffff'; ctx.fillText(L.t, 0, 0);
-  ctx.restore();
-}
-
 // vykresli JEN viditelné dlaždice (zvládne libovolně velkou mapu)
 function drawMap() {
   ctx.fillStyle = '#10101c'; ctx.fillRect(0, 0, VW, VH);   // mimo mapu = tma
-  const startC = Math.max(0, Math.floor((cam.x - VW/2) / TILE) - 1);
-  const endC   = Math.min(COLS-1, Math.floor((cam.x + VW/2) / TILE) + 1);
-  const startR = Math.max(0, Math.floor((cam.y - VH/2) / TILE) - 1);
-  const endR   = Math.min(ROWS-1, Math.floor((cam.y + VH/2) / TILE) + 1);
-  for (let r = startR; r <= endR; r++)
-    for (let c = startC; c <= endC; c++) {
-      const sx = Math.round(VW/2 + (c*TILE - cam.x));
-      const sy = Math.round(VH/2 + (r*TILE - cam.y));
-      paintTile(ctx, c, r, sx, sy);
-    }
-  for (const p of PROPS) drawProp(p);
-  for (const L of MAP_LABELS) drawLabel(L);
+  if (!mapReady) return;
+  // vykresli jen viditelný výřez mapy, přiblížený na ZOOM
+  const srcW = VW/ZOOM, srcH = VH/ZOOM;
+  const sx = clamp(cam.x - srcW/2, 0, Math.max(0, WPX - srcW));
+  const sy = clamp(cam.y - srcH/2, 0, Math.max(0, WPY - srcH));
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(mapImg, sx, sy, srcW, srcH, 0, 0, VW, VH);
 }
 
 function drawPlayer() {
@@ -884,21 +696,21 @@ function drawPlayer() {
 
   // stín pod nohama
   ctx.fillStyle = 'rgba(0,0,0,0.30)';
-  ctx.beginPath(); ctx.ellipse(0, 26, 20, 7, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, 15, 12, 4, 0, 0, Math.PI*2); ctx.fill();
 
   // aura párna (boost)
   if (player.boostT > 0) {
-    const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 42);
+    const g = ctx.createRadialGradient(0, 0, 3, 0, 0, 26);
     g.addColorStop(0, 'rgba(120,220,255,0.35)'); g.addColorStop(1, 'rgba(120,220,255,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 42, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI*2); ctx.fill();
   }
 
   if (charReady) {
     const moving = Math.hypot(player.vx, player.vy) > 0.4;
-    const bob = moving ? Math.sin(Date.now()/110) * 2 : 0;
-    const H = 72, W = H * (charImg.width / charImg.height);
+    const bob = moving ? Math.sin(Date.now()/110) * 1.5 : 0;
+    const H = 44, W = H * (charImg.width / charImg.height);
     ctx.scale(facing, 1);                       // překlopení vlevo/vpravo
-    ctx.drawImage(charImg, -W/2, -H + 28 + bob, W, H);
+    ctx.drawImage(charImg, -W/2, -H + 16 + bob, W, H);
   } else {
     // fallback než se sprite načte
     ctx.fillStyle = '#2d3340';
