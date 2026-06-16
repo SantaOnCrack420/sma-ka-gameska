@@ -24,10 +24,10 @@ window.addEventListener('resize', resize);
 resize();
 
 // ---------- Assets ----------
-const simImg = new Image(); simImg.src = 'assets/simmy.jpeg';
-const menuBg = new Image(); menuBg.src = 'assets/menu_bg.png';
-let simReady = false; simImg.onload = () => simReady = true;
-let menuReady = false; menuBg.onload = () => menuReady = true;
+const charImg = new Image(); charImg.src = 'assets/simmy_char.png';
+const menuBg  = new Image(); menuBg.src  = 'assets/menu_bg.png';
+let charReady = false; charImg.onload = () => charReady = true;
+let menuReady = false; menuBg.onload  = () => menuReady = true;
 
 // ---------- HUD ----------
 const ui = document.getElementById('ui');
@@ -92,6 +92,7 @@ const player = {
 };
 
 const cam = { x: player.wx, y: player.wy };
+let facing = 1;   // 1 = doprava, -1 = doleva
 
 function wts(wx, wy) {
   let dx = wx - cam.x, dy = wy - cam.y;
@@ -221,6 +222,7 @@ function update() {
     player.vx = (mdx/l)*player.speed;
     player.vy = (mdy/l)*player.speed;
     player.angle = Math.atan2(mdy, mdx) + Math.PI/2;
+    if (mdx > 0.15) facing = 1; else if (mdx < -0.15) facing = -1;
   } else { player.vx *= 0.7; player.vy *= 0.7; }
 
   let nx = player.wx + player.vx;
@@ -320,32 +322,21 @@ function drawPlayer() {
   ctx.save();
   ctx.translate(cx, cy);
 
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.beginPath(); ctx.ellipse(0, 20, 18, 7, 0, 0, Math.PI*2); ctx.fill();
+  // stín pod nohama
+  ctx.fillStyle = 'rgba(0,0,0,0.30)';
+  ctx.beginPath(); ctx.ellipse(0, 26, 20, 7, 0, 0, Math.PI*2); ctx.fill();
 
-  ctx.fillStyle = '#2d3340';
-  ctx.beginPath(); ctx.roundRect(-15, -2, 30, 28, 8); ctx.fill();
-
-  ctx.fillStyle = '#e8c9a0';
-  ctx.beginPath(); ctx.arc(-16, 12, 5, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(16, 12, 5, 0, Math.PI*2); ctx.fill();
-
-  ctx.fillStyle = '#3a7d2c';
-  ctx.fillRect(-22, 6, 7, 12);
-  ctx.fillStyle = '#f0e68c';
-  ctx.fillRect(-22, 4, 7, 3);
-
-  const hr = 16;
-  ctx.save();
-  ctx.beginPath(); ctx.arc(0, -14, hr, 0, Math.PI*2); ctx.closePath(); ctx.clip();
-  if (simReady) ctx.drawImage(simImg, -hr, -14-hr, hr*2, hr*2);
-  else { ctx.fillStyle = '#e8c9a0'; ctx.fillRect(-hr, -14-hr, hr*2, hr*2); }
-  ctx.restore();
-  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(0, -14, hr, 0, Math.PI*2); ctx.stroke();
-
-  ctx.fillStyle = '#fff'; ctx.fillRect(hr-4, -12, 9, 2);
-  ctx.fillStyle = '#ff5520'; ctx.fillRect(hr+5, -12, 2, 2);
+  if (charReady) {
+    const moving = Math.hypot(player.vx, player.vy) > 0.4;
+    const bob = moving ? Math.sin(Date.now()/110) * 2 : 0;
+    const H = 72, W = H * (charImg.width / charImg.height);
+    ctx.scale(facing, 1);                       // překlopení vlevo/vpravo
+    ctx.drawImage(charImg, -W/2, -H + 28 + bob, W, H);
+  } else {
+    // fallback než se sprite načte
+    ctx.fillStyle = '#2d3340';
+    ctx.beginPath(); ctx.roundRect(-14, -10, 28, 34, 8); ctx.fill();
+  }
 
   ctx.restore();
 }

@@ -1,11 +1,11 @@
-const CACHE = 'smazak-v5';
+const CACHE = 'smazak-v6';
 const FILES = [
   './',
   './index.html',
   './style.css',
   './game.js',
   './manifest.json',
-  './assets/simmy.jpeg',
+  './assets/simmy_char.png',
   './assets/menu_bg.png',
 ];
 
