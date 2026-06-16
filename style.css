@@ -72,3 +72,63 @@ body {
   from { transform: translateX(-50%) scale(1); }
   to   { transform: translateX(-50%) scale(1.05); }
 }
+
+#nick {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 8, 16, 0.92);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.nbox {
+  text-align: center;
+  padding: 28px 24px;
+  background: #16161f;
+  border: 3px solid #ffd23f;
+  border-radius: 16px;
+  width: 86%;
+  max-width: 340px;
+}
+.nbox h2 {
+  font-family: 'Oswald', Impact, sans-serif;
+  color: #ffd23f;
+  font-size: 22px;
+  letter-spacing: 1px;
+  margin-bottom: 18px;
+}
+#nickInput {
+  width: 100%;
+  font-family: 'Oswald', sans-serif;
+  font-size: 22px;
+  text-align: center;
+  padding: 12px;
+  border: 2px solid #555;
+  border-radius: 10px;
+  background: #0e0e16;
+  color: #fff;
+  outline: none;
+}
+#nickInput:focus { border-color: #ffd23f; }
+#nickErr {
+  color: #ff5b5b;
+  font-family: 'Oswald', sans-serif;
+  font-size: 14px;
+  min-height: 18px;
+  margin: 8px 0;
+}
+#nickBtn {
+  width: 100%;
+  font-family: 'Oswald', Impact, sans-serif;
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  background: #ffd23f;
+  color: #1c1c12;
+  cursor: pointer;
+}
+#nickBtn:active { transform: scale(0.97); }

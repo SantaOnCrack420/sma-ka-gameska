@@ -20,6 +20,14 @@
     <div id="power-indicator" class="hidden">⚡ GRANÁT BORDEL ⚡</div>
   </div>
   <div id="joystick-zone"></div>
+  <div id="nick">
+    <div class="nbox">
+      <h2>ZADEJ SVŮJ NICK</h2>
+      <input id="nickInput" maxlength="12" autocomplete="off" autocapitalize="off" placeholder="4–12 znaků">
+      <div id="nickErr"></div>
+      <button id="nickBtn">▶ POKRAČOVAT</button>
+    </div>
+  </div>
   <script src="game.js"></script>
   <script>
     if ('serviceWorker' in navigator) {

@@ -66,6 +66,31 @@ function sfx(name, vol = 1) {
   a.play().catch(() => {});
 }
 
+// ---------- Nick + leaderboard ----------
+let nick = localStorage.getItem('smazak_nick') || '';
+let nickMenuBtn = null;
+const nickEl    = document.getElementById('nick');
+const nickInput = document.getElementById('nickInput');
+const nickBtn   = document.getElementById('nickBtn');
+const nickErr   = document.getElementById('nickErr');
+function showNick() { nickInput.value = nick; nickErr.textContent = ''; nickEl.style.display = 'flex'; setTimeout(() => nickInput.focus(), 50); }
+function hideNick() { nickEl.style.display = 'none'; }
+function submitNick() {
+  const v = nickInput.value.trim().replace(/\s+/g, '_').slice(0, 12);
+  if (v.length < 4) { nickErr.textContent = 'Aspoň 4 znaky, bracho.'; return; }
+  nick = v; localStorage.setItem('smazak_nick', v); hideNick(); startMusic();
+}
+nickBtn.addEventListener('click', submitNick);
+nickInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitNick(); });
+
+function loadLB() { try { return JSON.parse(localStorage.getItem('smazak_lb') || '[]'); } catch (_) { return []; } }
+function submitScore(name, sc) {      // zatím lokální; backend doplníme později
+  const lb = loadLB();
+  lb.push({ name, score: sc });
+  lb.sort((a, b) => b.score - a.score);
+  localStorage.setItem('smazak_lb', JSON.stringify(lb.slice(0, 20)));
+}
+
 // ---------- HUD ----------
 const ui = document.getElementById('ui');
 const scoreEl = document.getElementById('score');
@@ -165,6 +190,7 @@ window.addEventListener('keyup', e => { keys[e.key] = false; });
 const joy = { active: false, id: -1, baseX: 0, baseY: 0, dx: 0, dy: 0 };
 function touchStart(x, y, id) {
   if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
+  if (state === 'MENU' && nickMenuBtn && x >= nickMenuBtn.x && x <= nickMenuBtn.x+nickMenuBtn.w && y >= nickMenuBtn.y && y <= nickMenuBtn.y+nickMenuBtn.h) { showNick(); return; }
   if (state !== 'PLAYING') { startOrClick(); return; }
   if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) { throwSmazak(); return; }
   if (fryBtn && Math.hypot(x - fryBtn.x, y - fryBtn.y) < fryBtn.r + 8) { firing = true; fireTouch = id; shootCd = 0; return; }
@@ -188,6 +214,7 @@ canvas.addEventListener('touchend',   e => { e.preventDefault(); for (const t of
 canvas.addEventListener('mousedown', e => {
   const x = e.clientX, y = e.clientY;
   if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
+  if (state === 'MENU' && nickMenuBtn && x >= nickMenuBtn.x && x <= nickMenuBtn.x+nickMenuBtn.w && y >= nickMenuBtn.y && y <= nickMenuBtn.y+nickMenuBtn.h) { showNick(); return; }
   if (state === 'PLAYING') {
     if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) { throwSmazak(); return; }
     if (fryBtn && Math.hypot(x - fryBtn.x, y - fryBtn.y) < fryBtn.r + 8) { firing = true; shootCd = 0; }
@@ -224,6 +251,7 @@ function toggleMute() { musicMuted = !musicMuted; if (!musicMuted && !musicStart
 // menu tlačítko: klikací efekt
 let menuPress = 0, pendingStart = false;
 function startOrClick() {
+  if (!nick) { showNick(); return; }
   if (state === 'MENU') { if (!pendingStart) { menuPress = 10; pendingStart = true; sfx('click'); } }
   else startGame();
 }
@@ -265,6 +293,7 @@ function gameOver() {
   state = 'OVER'; showHud(false);
   deathMsg = DEATH_MSGS[(Math.random()*DEATH_MSGS.length)|0];
   saveBest();
+  submitScore(nick || '?', score);
   sfx('gameover', 0.7);
   setMusicVol();   // zpět na 100 %
 }
@@ -976,6 +1005,28 @@ function drawMenu() {
   ctx.restore();
   menuBtn = { x: bx, y: by, w: bw, h: bh };
 
+  // --- Nick (změnit) vlevo nahoře ---
+  ctx.font = `600 14px Oswald, sans-serif`;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3; ctx.strokeStyle = '#000';
+  const ntxt = '👤 ' + (nick || '—') + '  (změnit)';
+  ctx.strokeText(ntxt, 14, 26); ctx.fillStyle = '#fff'; ctx.fillText(ntxt, 14, 26);
+  nickMenuBtn = { x: 10, y: 12, w: ctx.measureText(ntxt).width + 12, h: 28 };
+
+  // --- TOP 3 vpravo nahoře ---
+  const lb = loadLB().slice(0, 3);
+  if (lb.length) {
+    ctx.textAlign = 'right';
+    ctx.lineWidth = 3; ctx.strokeStyle = '#000';
+    ctx.font = 'bold 14px Oswald, sans-serif';
+    ctx.strokeText('🏆 TOP', VW-14, 22); ctx.fillStyle = '#ffd23f'; ctx.fillText('🏆 TOP', VW-14, 22);
+    ctx.font = '600 13px Oswald, sans-serif';
+    lb.forEach((e, i) => {
+      const t = `${i+1}. ${e.name} — ${e.score}`;
+      ctx.strokeText(t, VW-14, 42 + i*18); ctx.fillStyle = '#fff'; ctx.fillText(t, VW-14, 42 + i*18);
+    });
+  }
+
   // --- Disclaimer dole ---
   ctx.font = `600 ${Math.min(VW*0.032,13)}px Oswald, sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1024,11 +1075,29 @@ function drawGameOver() {
     yy += Math.min(VW*0.06, 24);
   }
 
-  gtaText(`SKÓRE: ${score}`, VW/2, yy + 30, 34, '#ffd700');
-  gtaText(`REKORD: ${best}`, VW/2, yy + 70, 22, '#fff');
+  gtaText(`SKÓRE: ${score}`, VW/2, yy + 28, 32, '#ffd700');
+
+  // --- LEADERBOARD (TOP 5) ---
+  const lb = loadLB().slice(0, 5);
+  let ly = yy + 64;
+  ctx.font = 'bold 16px Oswald, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3; ctx.strokeStyle = '#000';
+  ctx.strokeText('🏆 LEADERBOARD', VW/2, ly); ctx.fillStyle = '#ffd23f'; ctx.fillText('🏆 LEADERBOARD', VW/2, ly);
+  ly += 26;
+  ctx.font = '600 15px Oswald, sans-serif';
+  let shownMe = false;
+  lb.forEach((e, i) => {
+    const me = !shownMe && e.name === nick && e.score === score;
+    if (me) shownMe = true;
+    const t = `${i+1}.  ${e.name}  —  ${e.score}`;
+    ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(t, VW/2, ly);
+    ctx.fillStyle = me ? '#7CFC7C' : '#fff'; ctx.fillText(t, VW/2, ly);
+    ly += 22;
+  });
+
   const a = 0.5 + 0.5*Math.sin(Date.now()/300);
   ctx.globalAlpha = a;
-  gtaText('TAPNI PRO NOVOU HRU', VW/2, VH - 60, 22, '#fff', '#000', 4);
+  gtaText('TAPNI PRO NOVOU HRU', VW/2, VH - 50, 20, '#fff', '#000', 4);
   ctx.globalAlpha = 1;
 }
 
@@ -1076,6 +1145,7 @@ function loop() {
 buildMap();
 showHud(false);
 loop();
+if (!nick) showNick();   // poprvé: vyžádej nick
 
 // pokus spustit hudbu hned při načtení (pokud prohlížeč povolí autoplay);
 // jinak naskočí při prvním dotyku přes listenery výše
