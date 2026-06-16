@@ -168,6 +168,11 @@ let perkTriple = false, perkRapid = false;
 let smazakCd = 0;
 let smazakBtn = null;
 
+// juice: screen shake (trauma) + hitstop
+let trauma = 0, hitstop = 0;
+function addShake(a) { trauma = Math.min(1, trauma + a); }
+function freeze(f) { hitstop = Math.max(hitstop, f); }
+
 // barvy triček chodců
 const NPC_COLORS = ['#c0392b','#2980b9','#27ae60','#8e44ad','#d35400','#16a085'];
 
@@ -189,7 +194,7 @@ function banner(text, t) { bannerText = text; bannerT = t; }
 const DEATH_MSGS = [
   'Zabili tě cigáni, okradli tě o všechno párno a tvou mrtvolu hodili do Olzy.',
   'Prodali tě Vietnamcům jako maso na kung-pao za pár gramů trávy. Aspoň k něčemu jsi byl dobrej.',
-  'Pečo tě sejmul mačetou a jeho pes tě dojedl. Konec smažáka.',
+  'Peco tě sejmul mačetou a jeho pes tě dojedl. Konec smažáka.',
   'Vykrváceli tě na Náměstí Míru. Hranolky vystydly, párno fuč.',
   'Skončil jsi v Olze tváří dolů. Holubi měli hody.',
 ];
@@ -252,7 +257,7 @@ function spawnBossWave() {
   };
   dog = { wx: (boss.wx + 50) % WPX, wy: boss.wy, t: 0, hp: 3, hit: 0 };
   for (let i = 0; i < 3; i++) spawnCoganRing();
-  banner('☠ PEČO ÚTOČÍ S MAČETOU — BACHA, BOSS FIGHT! xd', 200);
+  banner('☠ PECO ÚTOČÍ S MAČETOU — BACHA, BOSS FIGHT! xd', 200);
 }
 function onWaveCleared() {
   waveState = 'BREAK'; breakT = 200;
@@ -319,6 +324,7 @@ function throwSmazak() {
   smazakCd = 300;   // ~5 s
 }
 function smazakBoom(wx, wy) {
+  addShake(0.55); freeze(4);
   boom(wx, wy, '#e8a020', 26);
   boom(wx, wy, '#f4c430', 18);
   const R = 95;
@@ -336,6 +342,7 @@ function boom(wx, wy, col, n) {
 
 // ---------- Update ----------
 function update() {
+  if (trauma > 0) trauma *= 0.90;   // doznívání otřesu
   if (state !== 'PLAYING') return;
 
   let mdx = 0, mdy = 0;
@@ -411,7 +418,7 @@ function update() {
     if (c.hit > 0) c.hit--;
     const d = chase(c, 1.5);
     if (d < 28 && hurtCd === 0) {
-      lives--; hurtCd = 90; updateHud();
+      lives--; hurtCd = 90; updateHud(); addShake(0.45);
       boom(player.wx, player.wy, '#ff3b3b', 12);
       popup('🤕 Cigán tě dostal!');
       if (lives <= 0) { gameOver(); return; }
@@ -424,37 +431,37 @@ function update() {
       if (c.hp > 0 && wdist(f.wx, f.wy, c.wx, c.wy) < 24) {
         c.hp--; c.hit = 10; f.life = 0;
         boom(c.wx, c.wy, '#e8a020', 8);
-        if (c.hp <= 0) { score += 25; coganKills++; updateHud(); boom(c.wx, c.wy, '#ff3b3b', 14); }
+        if (c.hp <= 0) { score += 25; coganKills++; updateHud(); boom(c.wx, c.wy, '#ff3b3b', 14); addShake(0.22); }
       }
     }
   }
   cogani = cogani.filter(c => c.hp > 0);
 
-  // --- BOSS Pečo + pes ---
+  // --- BOSS Peco + pes ---
   if (boss) {
     boss.t += 0.05; if (boss.hit > 0) boss.hit--;
     const d = chase(boss, 1.1);
     if (d < 46 && hurtCd === 0) {
-      lives--; hurtCd = 90; updateHud();
+      lives--; hurtCd = 90; updateHud(); addShake(0.45);
       boom(player.wx, player.wy, '#ff3b3b', 16);
-      popup('🔪 Pečo tě seknul mačetou!');
+      popup('🔪 Peco tě seknul mačetou!');
       if (lives <= 0) { gameOver(); return; }
     }
     for (const f of fries) {
       if (f.life > 0 && wdist(f.wx, f.wy, boss.wx, boss.wy) < 42) {
-        boss.hp--; boss.hit = 8; f.life = 0; boom(boss.wx, boss.wy, '#e8a020', 6);
+        boss.hp--; boss.hit = 8; f.life = 0; boom(boss.wx, boss.wy, '#e8a020', 6); addShake(0.1);
       }
     }
     if (boss.hp <= 0) {
-      boom(boss.wx, boss.wy, '#ff3b3b', 40); score += 200; updateHud();
-      popup('🏆 PEČO PADL! +200'); boss = null; dog = null;
+      boom(boss.wx, boss.wy, '#ff3b3b', 40); score += 200; updateHud(); addShake(0.85); freeze(6);
+      popup('🏆 PECO PADL! +200'); boss = null; dog = null;
     }
   }
   if (dog) {
     dog.t += 0.05; if (dog.hit > 0) dog.hit--;
     const d = chase(dog, 2.2);
     if (d < 24 && hurtCd === 0) {
-      lives--; hurtCd = 90; updateHud();
+      lives--; hurtCd = 90; updateHud(); addShake(0.45);
       boom(player.wx, player.wy, '#ff3b3b', 10);
       popup('🐕 Pečův pes tě kousnul!');
       if (lives <= 0) { gameOver(); return; }
@@ -709,8 +716,8 @@ function drawBoss() {
   ctx.restore();
   // jmenovka
   ctx.font = 'bold 11px Oswald, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#000'; ctx.lineWidth = 3; ctx.strokeText('PEČO', x, y-40);
-  ctx.fillStyle = '#ff4040'; ctx.fillText('PEČO', x, y-40);
+  ctx.fillStyle = '#000'; ctx.lineWidth = 3; ctx.strokeText('PECO', x, y-40);
+  ctx.fillStyle = '#ff4040'; ctx.fillText('PECO', x, y-40);
 }
 
 function drawDog() {
@@ -742,7 +749,7 @@ function drawBossHpBar() {
   ctx.fillStyle = '#3a0000'; ctx.fillRect(x, y, w, h);
   ctx.fillStyle = '#e02020'; ctx.fillRect(x, y, w*Math.max(0,boss.hp/boss.maxhp), h);
   ctx.font = 'bold 12px Oswald, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#fff'; ctx.fillText('☠ PEČO', VW/2, y+h/2);
+  ctx.fillStyle = '#fff'; ctx.fillText('☠ PECO', VW/2, y+h/2);
 }
 
 function drawBanner() {
@@ -927,13 +934,18 @@ function drawGameOver() {
 
 // ---------- Smyčka ----------
 function loop() {
-  update();
+  if (hitstop > 0) hitstop--; else update();   // hitstop = mikro-zmrazení
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, VW, VH);
 
   if (state === 'MENU') {
     drawMenu();
   } else {
+    // screen shake: posuň svět (ne UI) podle trauma²
+    const s = trauma * trauma * 16;
+    const shx = (Math.random()*2-1) * s, shy = (Math.random()*2-1) * s;
+    ctx.save();
+    ctx.translate(shx, shy);
     drawMap();
     drawParticles();
     drawBags();
@@ -944,6 +956,8 @@ function loop() {
     drawBoss();
     drawFries();
     drawPlayer();
+    ctx.restore();
+    // UI bez otřesu
     drawPopups();
     drawBanner();
     drawBossHpBar();
