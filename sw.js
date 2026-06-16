@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v4';
+const CACHE = 'smazak-v5';
 const FILES = [
   './',
   './index.html',
@@ -23,8 +23,16 @@ self.addEventListener('activate', e => {
   );
 });
 
+// NETWORK-FIRST: vždy zkus síť (aktuální verze), cache jen jako offline záloha.
 self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
+    fetch(e.request)
+      .then(resp => {
+        const copy = resp.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+        return resp;
+      })
+      .catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
   );
 });
