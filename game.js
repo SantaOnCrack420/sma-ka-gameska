@@ -182,18 +182,18 @@ const scoreEl = document.getElementById('score');
 const livesEl = document.getElementById('lives');
 function showHud(on) { if (ui) ui.style.display = on ? 'flex' : 'none'; }
 
-// ---------- Svět (reálný Český Těšín z OpenStreetMap) ----------
+// ---------- Svět (stylizovaný Český Těšín — ruční návrh pro hratelnost) ----------
 const TILE = 64;
-const COLS = MAP_COLS, ROWS = MAP_ROWS;
+const COLS = 44, ROWS = 58;
 const WPX = COLS * TILE;
 const WPY = ROWS * TILE;
 
 const T = { GRASS:0, ROAD:1, SIDEWALK:2, BUILDING:3, PLAZA:4, WATER:5, BRIDGE:6, POLAND:7 };
 const SOLID = new Set([T.BUILDING, T.WATER]);
 
-// start = Náměstí ČSA
-const SPAWN_WX = MAP_SPAWN[0] * TILE + 32;
-const SPAWN_WY = MAP_SPAWN[1] * TILE + 32;
+// start = Náměstí ČSA (na dlažbě, vedle kašny)
+const SPAWN_WX = 20 * TILE + 32;
+const SPAWN_WY = 16 * TILE + 32;
 
 let map = new Int8Array(COLS * ROWS);
 const at = (c, r) => map[r * COLS + c];
@@ -202,20 +202,70 @@ function fill(c0, r0, c1, r1, t) {
     for (let c = c0; c <= c1; c++)
       if (c >= 0 && c < COLS && r >= 0 && r < ROWS) map[r * COLS + c] = t;
 }
+// silnice se širokým chodníkem podél (čitelná ulice)
+function vRoad(c, r0, r1) { fill(c-2, r0, c-2, r1, T.SIDEWALK); fill(c+1, r0, c+1, r1, T.SIDEWALK); fill(c-1, r0, c, r1, T.ROAD); }
+function hRoad(r, c0, c1) { fill(c0, r-2, c1, r-2, T.SIDEWALK); fill(c0, r+1, c1, r+1, T.SIDEWALK); fill(c0, r-1, c1, r, T.ROAD); }
+// blok domů s dvorkem (okraj barák, vnitřek tráva)
+function block(c0, r0, c1, r1) {
+  for (let r = r0; r <= r1; r++)
+    for (let c = c0; c <= c1; c++) {
+      if (at(c, r) !== T.GRASS) continue;
+      const edge = (c === c0 || c === c1 || r === r0 || r === r1);
+      const big = (c1 - c0 >= 3 && r1 - r0 >= 3);
+      if (edge || !big) map[r * COLS + c] = T.BUILDING;
+    }
+}
 
-// props (zatím prázdné — město přijde z OSM; dekorace přidáme později)
 let PROPS = [];
 
-// dekóduj mapu z RLE (MAP_RLE: písmeno A.. = dlaždice 0.., následované počtem)
 function buildMap() {
-  let i = 0, idx = 0;
-  const s = MAP_RLE, n = s.length;
-  while (i < n) {
-    const val = s.charCodeAt(i) - 65; i++;
-    let num = 0;
-    while (i < n && s.charCodeAt(i) >= 48 && s.charCodeAt(i) <= 57) { num = num*10 + (s.charCodeAt(i)-48); i++; }
-    for (let k = 0; k < num && idx < map.length; k++) map[idx++] = val;
-  }
+  map.fill(T.GRASS);
+
+  // okraj = voda (hranice mapy)
+  fill(0, 0, COLS-1, 1, T.WATER); fill(0, ROWS-2, COLS-1, ROWS-1, T.WATER);
+  fill(0, 0, 1, ROWS-1, T.WATER); fill(COLS-2, 0, COLS-1, ROWS-1, T.WATER);
+
+  // --- Polsko / Cieszyn (západní břeh) ---
+  fill(2, 2, 9, ROWS-3, T.POLAND);
+  block(2, 5, 5, 11); block(2, 16, 5, 23); block(2, 30, 5, 39); block(2, 44, 5, 52);
+
+  // --- řeka Olza + 3 mosty ---
+  fill(10, 2, 12, ROWS-3, T.WATER);
+  fill(10, 8, 12, 9, T.BRIDGE);     // vlakový (sever)
+  fill(10, 28, 12, 29, T.BRIDGE);   // pěší (centrum)
+  fill(10, 46, 12, 47, T.BRIDGE);   // pěší (jih)
+
+  // --- Český Těšín: přehledná uliční síť ---
+  vRoad(16, 2, ROWS-3);   // Nábřežní
+  vRoad(31, 2, ROWS-3);   // Hlavní třída
+  vRoad(39, 2, ROWS-3);   // Nádražní
+  hRoad(11, 14, COLS-3);
+  hRoad(25, 14, COLS-3);
+  hRoad(39, 14, COLS-3);
+  hRoad(51, 14, COLS-3);
+
+  // --- bloky domů s dvorky ---
+  block(14, 3, 14, 9); block(19, 3, 28, 9); block(34, 3, 37, 9); block(42, 3, 42, 9);
+  block(14, 14, 14, 23); block(34, 14, 37, 23); block(42, 14, 42, 23);
+  block(14, 28, 14, 37); block(19, 28, 28, 37); block(34, 28, 37, 37); block(42, 28, 42, 37);
+  block(14, 42, 14, 49); block(19, 42, 28, 49); block(34, 42, 37, 49); block(42, 42, 42, 49);
+
+  // --- Náměstí ČSA (otevřená dlažba) ---
+  fill(19, 14, 28, 23, T.PLAZA);
+  // kašna uprostřed (kolize)
+  fill(23, 18, 24, 19, T.WATER);
+  // Radnice (sever náměstí) + Nádraží (jih)
+  fill(20, 28, 27, 31, T.BUILDING);   // Radnice/úřad blok
+  fill(34, 44, 37, 49, T.BUILDING);   // Nádraží
+
+  // --- props ---
+  PROPS = [];
+  PROPS.push({ type:'fountain', x:23.5, y:18.5, r:1.3 });
+  for (let ry = 15; ry <= 22; ry += 3) { PROPS.push({ type:'tree', x:20, y:ry }); PROPS.push({ type:'tree', x:27, y:ry }); }
+  PROPS.push({ type:'bench', x:23.5, y:16, h:0 }); PROPS.push({ type:'bench', x:23.5, y:21.5, h:0 });
+  PROPS.push({ type:'stall', x:25.5, y:15 }); PROPS.push({ type:'stall', x:25.5, y:22 });
+  const cc = ['#b13b3b','#3b6db1','#cfa92e','#4a4a4a'];
+  for (let i = 0; i < 4; i++) PROPS.push({ type:'car', x:30, y:13 + i*1.4, col:cc[i] });
 }
 
 // ---------- Hráč ----------
@@ -701,10 +751,14 @@ const TCOL = {
   [T.POLAND]:  '#6f7c46',
 };
 
-// popisky míst (souřadnice v dlaždicích reálné mapy)
+// popisky míst (souřadnice v dlaždicích)
 const MAP_LABELS = [
-  { x: MAP_SPAWN[0], y: MAP_SPAWN[1] - 2, t: 'NÁMĚSTÍ ČSA', s: 18, col: '#ffffff' },
-  { x: 30, y: 150, t: '◂ POLSKO / CIESZYN', s: 16, col: '#e8e0c0' },
+  { x: 23.5, y: 18.5, t: 'NÁMĚSTÍ ČSA', s: 16, col: '#ffffff' },
+  { x: 23, y: 29.5, t: 'RADNICE', s: 13, col: '#ffe9a0' },
+  { x: 35, y: 46.5, t: 'NÁDRAŽÍ', s: 13, col: '#ffe9a0' },
+  { x: 31, y: 34, t: 'HLAVNÍ TŘÍDA', s: 12, rot: -Math.PI/2, col: '#ffe9a0' },
+  { x: 6, y: 28, t: 'POLSKO', s: 15, rot: -Math.PI/2, col: '#e8e0c0' },
+  { x: 11, y: 20, t: 'OLZA', s: 12, rot: -Math.PI/2, col: '#cfe6ff' },
 ];
 
 const isB = (c, r) => c >= 0 && c < COLS && r >= 0 && r < ROWS && at(c, r) === T.BUILDING;
