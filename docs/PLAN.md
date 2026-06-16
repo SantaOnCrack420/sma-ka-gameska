@@ -74,3 +74,18 @@ Motor tempa hry.
 ## Hotovo (základ stojí)
 Engine (bounded svět, render jen viditelného), postava + menu (AI art), zvuky (Web Audio),
 hudba, nastavení, nick + globální leaderboard (Firebase), vlny/boss/smažák/párno (přepracují se v C/F).
+
+## STAV k večeru 16.6. — kde jsme skončili
+- **Mapa = reálný Český Těšín z OSM**, vyrenderovaný jako **2.5D** (budovy do výšky, střechy, stíny) — z dat, ne AI. Polsko ořezáno hranicí obce.
+- **Sladěné měřítko 3,6 px = 1 m** pro mapu i Šimmyho (konec dinosaura). Plocha = centrum + ~560 m (náměstí, Hlavní třída, řeka). Celé město → chunky později.
+- `map.png` 4031×4032 (~16 MP, na hraně iOS limitu — kdyby se na slabším mobilu nenačetla, zmenšit).
+- Engine: obrázek-svět + ZOOM + kolize z OSM (RLE grid, eroze = průchozí ulice). `mapdata.js` = kolize+meta. COMBAT=false (Fáze A = procházka).
+- Landscape (na šířku) + výzva „otoč telefon". Bezpečnostní audit repa = čisté.
+
+### Ladí se (zpětná vazba od Davida)
+- Rychlost chůze (zkoušíme: 0.28 moc pomalé „mravenec" → teď **1.05**), ZOOM (2.1), velikost Šimmyho (H=30) — doladit dle pocitu.
+- Pak: „měřítko sedí" → **Fáze B** (twin-stick ovládání na šířku, auta/popelnice ve stejném měřítku, hlášky, kašna, avatar s hranolky).
+
+### Otevřené nabídky
+- Zamknout Firebase pravidla (validace nicku/skóre, zákaz mazání).
+- Vylepšit 2.5D render (hezčí střechy, parkoviště, stromy na náměstí) nebo zvážit Three.js (opravdové 3D) později.

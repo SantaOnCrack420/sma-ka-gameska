@@ -211,7 +211,7 @@ const player = {
   wx: SPAWN_WX,
   wy: SPAWN_WY,
   vx: 0, vy: 0,
-  speed: 0.28,
+  speed: 1.05,
   angle: 0,
 };
 
