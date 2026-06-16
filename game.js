@@ -145,6 +145,7 @@ canvas.addEventListener('mousedown', () => { if (state !== 'PLAYING') startGame(
 
 // ---------- Herní stav ----------
 let state = 'MENU';
+let menuBtn = null;
 let score = 0, lives = 3;
 let fries = [], pigeons = [], particles = [];
 let shootCd = 0, pigKills = 0;
@@ -405,19 +406,51 @@ function gtaText(text, x, y, size, fill = '#ffd700', stroke = '#000', sw = 6) {
 function drawMenu() {
   ctx.fillStyle = '#10101c';
   ctx.fillRect(0, 0, VW, VH);
+
+  // Pozadí: COVER (vyplní celou obrazovku, portrait obrázek sedne přesně)
   if (menuReady) {
-    // CONTAIN — ukáže celý plakát, černé pruhy nahoře/dole
     const ir = menuBg.width / menuBg.height;
     const cr = VW / VH;
     let w, h, x, y;
-    if (cr > ir) { h = VH; w = h*ir; x = (VW-w)/2; y = 0; }
-    else { w = VW; h = w/ir; x = 0; y = (VH-h)/2; }
+    if (cr > ir) { w = VW; h = w/ir; x = 0; y = (VH-h)/2; }
+    else { h = VH; w = h*ir; x = (VW-w)/2; y = 0; }
     ctx.drawImage(menuBg, x, y, w, h);
   }
-  const a = 0.5 + 0.5*Math.sin(Date.now()/300);
-  ctx.globalAlpha = a;
-  gtaText('TAPNI PRO START', VW/2, VH - 50, 26, '#fff', '#000', 5);
-  ctx.globalAlpha = 1;
+
+  // Tmavé přechody nahoře a dole pro čitelnost textu
+  let gTop = ctx.createLinearGradient(0, 0, 0, VH*0.32);
+  gTop.addColorStop(0, 'rgba(0,0,0,0.78)'); gTop.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gTop; ctx.fillRect(0, 0, VW, VH*0.32);
+  let gBot = ctx.createLinearGradient(0, VH*0.55, 0, VH);
+  gBot.addColorStop(0, 'rgba(0,0,0,0)'); gBot.addColorStop(1, 'rgba(0,0,0,0.85)');
+  ctx.fillStyle = gBot; ctx.fillRect(0, VH*0.55, VW, VH*0.45);
+
+  // --- Název hry (GTA styl) ---
+  const titleSize = Math.min(VW * 0.115, 56);
+  gtaText('GTA 7: TĚŠÍN CITY', VW/2, VH*0.10, titleSize, '#ffd23f', '#000', 8);
+  gtaText('Smažák s Hranolkama DLC', VW/2, VH*0.10 + titleSize*0.95, titleSize*0.5, '#ffffff', '#000', 5);
+
+  // --- Tlačítko NOVÁ KRA ---
+  const bw = Math.min(VW*0.7, 300), bh = 64;
+  const bx = (VW-bw)/2, by = VH*0.74;
+  const pulse = 0.5 + 0.5*Math.sin(Date.now()/400);
+  ctx.save();
+  ctx.shadowColor = `rgba(255,210,63,${0.4+pulse*0.4})`;
+  ctx.shadowBlur = 18 + pulse*14;
+  ctx.fillStyle = '#1c1c12';
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 14); ctx.fill();
+  ctx.restore();
+  ctx.lineWidth = 3; ctx.strokeStyle = '#ffd23f';
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 14); ctx.stroke();
+  gtaText('▶  NOVÁ KRA', VW/2, by + bh/2 + 1, 30, '#ffd23f', '#000', 5);
+  menuBtn = { x: bx, y: by, w: bw, h: bh };
+
+  // --- Disclaimer dole ---
+  ctx.font = `600 ${Math.min(VW*0.032,13)}px Oswald, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(255,255,255,0.65)';
+  ctx.fillText('Všechny události, postavy a místa jsou fiktivní.', VW/2, VH - 42);
+  ctx.fillText('Jakákoliv podobnost se skutečnými osobami je čistě náhodná. xd', VW/2, VH - 24);
 }
 
 function drawGameOver() {
