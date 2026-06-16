@@ -186,7 +186,7 @@ function showHud(on) { if (ui) ui.style.display = on ? 'flex' : 'none'; }
 
 // ---------- Svět (reálný Český Těšín — obrázek + kolize z OSM) ----------
 const WPX = MAP_IMG_W, WPY = MAP_IMG_H;   // svět = pixely mapy
-const ZOOM = 3.0;                          // přiblížení na úroveň chůze (laditelné)
+const ZOOM = 4.5;                          // přiblížení na úroveň chůze (laditelné)
 const COMBAT = false;                      // Fáze A = procházka; ve Fázi B zapnout boj
 const SPAWN_WX = SPAWN_PX[0];
 const SPAWN_WY = SPAWN_PX[1];
@@ -211,7 +211,7 @@ const player = {
   wx: SPAWN_WX,
   wy: SPAWN_WY,
   vx: 0, vy: 0,
-  speed: 1.7,
+  speed: 0.5,
   angle: 0,
 };
 

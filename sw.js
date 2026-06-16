@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v26';
+const CACHE = 'smazak-v27';
 const FILES = [
   './',
   './index.html',
