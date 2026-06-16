@@ -30,41 +30,59 @@ const menuBg  = new Image(); menuBg.src  = 'assets/menu_bg.png';
 let charReady = false; charImg.onload = () => charReady = true;
 let menuReady = false; menuBg.onload  = () => menuReady = true;
 
-// ---------- Hudba ----------
-// Nahraj song jako assets/music.mp3 (nebo .ogg a změň příponu níže).
+// ---------- Nastavení zvuku (perzistované) ----------
+let musicOn  = localStorage.getItem('smazak_musicOn') !== '0';
+let sfxOn    = localStorage.getItem('smazak_sfxOn')   !== '0';
+let musicVol = (+(localStorage.getItem('smazak_musicVol') ?? 100)) / 100;
+let sfxVol   = (+(localStorage.getItem('smazak_sfxVol')   ?? 80))  / 100;
+let muted    = false;   // rychlý master mute (tlačítko 🔊)
+function saveAudioPrefs() {
+  localStorage.setItem('smazak_musicOn', musicOn ? '1' : '0');
+  localStorage.setItem('smazak_sfxOn',   sfxOn   ? '1' : '0');
+  localStorage.setItem('smazak_musicVol', Math.round(musicVol * 100));
+  localStorage.setItem('smazak_sfxVol',   Math.round(sfxVol * 100));
+}
+
+// ---------- Hudba (HTMLAudio element) ----------
 const music = new Audio('assets/music.mp3');
 music.loop = true;
-music.volume = 1.0;
-let musicStarted = false, musicMuted = false;
+let musicStarted = false;
 function startMusic() {
-  if (musicStarted || musicMuted) return;
+  if (musicStarted || muted || !musicOn) return;
   music.play().then(() => { musicStarted = true; setMusicVol(); }).catch(() => {});
 }
 function setMusicVol() {
-  // menu = 100 %, ve hře ztlumeno na 50 % (ať jsou slyšet zvuky)
-  music.volume = musicMuted ? 0 : (state === 'PLAYING' ? 0.5 : 1.0);
+  const base = (state === 'PLAYING') ? 0.5 : 1.0;   // ve hře ztlumeno pod SFX
+  music.volume = (muted || !musicOn) ? 0 : base * musicVol;
 }
-// odemkni přehrávání při prvním dotyku/kliku/klávese (autoplay policy)
-['touchstart', 'mousedown', 'keydown'].forEach(ev =>
-  window.addEventListener(ev, startMusic));
 
-// ---------- Zvukové efekty (8-bit, vyměnitelné v assets/sfx/) ----------
-// Pool pevných elementů na každý zvuk — žádné plození nových (iOS jinak seká).
-const SFX = {};
-['click','shoot','hit','kill','pickup','hurt','boom','boss','wave','gameover'].forEach(n => {
-  const pool = [];
-  for (let i = 0; i < 4; i++) { const a = new Audio('assets/sfx/' + n + '.wav'); a.preload = 'auto'; pool.push(a); }
-  SFX[n] = { pool, idx: 0 };
-});
-function sfx(name, vol = 1) {
-  if (musicMuted) return;
-  const e = SFX[name]; if (!e) return;
-  const a = e.pool[e.idx]; e.idx = (e.idx + 1) % e.pool.length;
-  try { a.currentTime = 0; } catch (_) {}
-  a.volume = vol;
-  a.playbackRate = 0.92 + Math.random() * 0.16;   // náhodný pitch ±8 % (ať to není strojové)
-  a.play().catch(() => {});
+// ---------- SFX přes Web Audio API (nízká latence, žádný lag na iOS) ----------
+let actx = null;
+const SFXBUF = {};
+const SFX_NAMES = ['click','shoot','hit','kill','pickup','hurt','boom','boss','wave','gameover'];
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); startMusic(); return; }
+  try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) { return; }
+  SFX_NAMES.forEach(n =>
+    fetch('assets/sfx/' + n + '.wav')
+      .then(r => r.arrayBuffer())
+      .then(b => actx.decodeAudioData(b))
+      .then(buf => { SFXBUF[n] = buf; })
+      .catch(() => {}));
+  startMusic();
 }
+function sfx(name, vol = 1) {
+  if (muted || !sfxOn || !actx) return;
+  const buf = SFXBUF[name]; if (!buf) return;
+  const src = actx.createBufferSource(); src.buffer = buf;
+  src.playbackRate.value = 0.92 + Math.random() * 0.16;   // náhodný pitch ±8 %
+  const g = actx.createGain(); g.gain.value = vol * sfxVol;
+  src.connect(g); g.connect(actx.destination);
+  src.start();
+}
+// odemkni audio při prvním dotyku/kliku/klávese (autoplay policy)
+['touchstart', 'mousedown', 'keydown'].forEach(ev =>
+  window.addEventListener(ev, initAudio));
 
 // ---------- Nick + leaderboard ----------
 let nick = localStorage.getItem('smazak_nick') || '';
@@ -99,6 +117,7 @@ function refreshLB() {                  // stáhni globální žebříček do ca
       arr.sort((a, b) => b.score - a.score);
       lbCache = arr.slice(0, 50);
       localStorage.setItem('smazak_lb', JSON.stringify(lbCache.slice(0, 20)));  // offline záloha
+      if (settingsEl && settingsEl.style.display === 'flex') renderLbList();
     })
     .catch(() => {});
 }
@@ -116,6 +135,37 @@ function submitScore(name, sc) {
     body: JSON.stringify({ name, score: sc, ts: Date.now() }),
   }).then(() => setTimeout(refreshLB, 600)).catch(() => {});
 }
+
+// ---------- Nastavení (overlay) ----------
+const settingsEl    = document.getElementById('settings');
+const musicOnCb     = document.getElementById('musicOnCb');
+const sfxOnCb       = document.getElementById('sfxOnCb');
+const musicVolSl    = document.getElementById('musicVolSl');
+const sfxVolSl      = document.getElementById('sfxVolSl');
+const lbListEl      = document.getElementById('lbList');
+const settingsClose = document.getElementById('settingsClose');
+let settingsBtn = null;   // ozubené kolo v menu (canvas)
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+function renderLbList() {
+  const lb = loadLB().slice(0, 10);
+  lbListEl.innerHTML = lb.length
+    ? lb.map(e => `<li>${escapeHtml(e.name)} — ${e.score}</li>`).join('')
+    : '<li class="empty">Zatím nikdo. Buď první! 🍟</li>';
+}
+function openSettings() {
+  musicOnCb.checked = musicOn; sfxOnCb.checked = sfxOn;
+  musicVolSl.value = Math.round(musicVol * 100);
+  sfxVolSl.value = Math.round(sfxVol * 100);
+  renderLbList(); refreshLB();
+  settingsEl.style.display = 'flex';
+}
+function closeSettings() { settingsEl.style.display = 'none'; }
+musicOnCb.addEventListener('change', () => { musicOn = musicOnCb.checked; if (musicOn) startMusic(); setMusicVol(); saveAudioPrefs(); });
+sfxOnCb.addEventListener('change',   () => { sfxOn = sfxOnCb.checked; saveAudioPrefs(); if (sfxOn) sfx('click'); });
+musicVolSl.addEventListener('input', () => { musicVol = musicVolSl.value / 100; setMusicVol(); saveAudioPrefs(); });
+sfxVolSl.addEventListener('input',   () => { sfxVol = sfxVolSl.value / 100; saveAudioPrefs(); });
+sfxVolSl.addEventListener('change',  () => sfx('click'));
+settingsClose.addEventListener('click', closeSettings);
 
 // ---------- HUD ----------
 const ui = document.getElementById('ui');
@@ -217,6 +267,7 @@ const joy = { active: false, id: -1, baseX: 0, baseY: 0, dx: 0, dy: 0 };
 function touchStart(x, y, id) {
   if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
   if (state === 'MENU' && nickMenuBtn && x >= nickMenuBtn.x && x <= nickMenuBtn.x+nickMenuBtn.w && y >= nickMenuBtn.y && y <= nickMenuBtn.y+nickMenuBtn.h) { showNick(); return; }
+  if (state === 'MENU' && settingsBtn && x >= settingsBtn.x && x <= settingsBtn.x+settingsBtn.w && y >= settingsBtn.y && y <= settingsBtn.y+settingsBtn.h) { openSettings(); return; }
   if (state !== 'PLAYING') { startOrClick(); return; }
   if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) { throwSmazak(); return; }
   if (fryBtn && Math.hypot(x - fryBtn.x, y - fryBtn.y) < fryBtn.r + 8) { firing = true; fireTouch = id; shootCd = 0; return; }
@@ -241,6 +292,7 @@ canvas.addEventListener('mousedown', e => {
   const x = e.clientX, y = e.clientY;
   if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
   if (state === 'MENU' && nickMenuBtn && x >= nickMenuBtn.x && x <= nickMenuBtn.x+nickMenuBtn.w && y >= nickMenuBtn.y && y <= nickMenuBtn.y+nickMenuBtn.h) { showNick(); return; }
+  if (state === 'MENU' && settingsBtn && x >= settingsBtn.x && x <= settingsBtn.x+settingsBtn.w && y >= settingsBtn.y && y <= settingsBtn.y+settingsBtn.h) { openSettings(); return; }
   if (state === 'PLAYING') {
     if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) { throwSmazak(); return; }
     if (fryBtn && Math.hypot(x - fryBtn.x, y - fryBtn.y) < fryBtn.r + 8) { firing = true; shootCd = 0; }
@@ -272,7 +324,7 @@ let smazakBtn = null;
 let fryBtn = null;
 let firing = false, fireTouch = -1;
 let muteBtn = null;
-function toggleMute() { musicMuted = !musicMuted; if (!musicMuted && !musicStarted) startMusic(); setMusicVol(); }
+function toggleMute() { muted = !muted; if (!muted) startMusic(); setMusicVol(); }
 
 // menu tlačítko: klikací efekt
 let menuPress = 0, pendingStart = false;
@@ -311,7 +363,7 @@ const DEATH_MSGS = [
   'Zabili tě cigáni, okradli tě o všechno párno a tvou mrtvolu hodili do Olzy.',
   'Prodali tě Vietnamcům jako maso na kung-pao za pár gramů trávy. Aspoň k něčemu jsi byl dobrej.',
   'Peco tě sejmul mačetou a jeho pes tě dojedl. Konec smažáka.',
-  'Vykrváceli tě na Náměstí Míru. Hranolky vystydly, párno fuč.',
+  'Pobodali tě na Náměstí Míru. Teď ležíš pochcanej v kaluži krve a párno je fuč.',
   'Skončil jsi v Olze tváří dolů. Holubi měli hody.',
 ];
 let deathMsg = '';
@@ -601,7 +653,12 @@ function update() {
     s.wx = (s.wx + s.vx + WPX) % WPX;
     s.wy = (s.wy + s.vy + WPY) % WPY;
     s.life--;
-    if (s.life <= 0) { smazakBoom(s.wx, s.wy); s.dead = true; }
+    // vybuchne při zásahu nepřítele (ne až na konci dráhy)
+    const hitEnemy =
+      cogani.some(c => c.hp > 0 && wdist(s.wx, s.wy, c.wx, c.wy) < 42) ||
+      (boss && wdist(s.wx, s.wy, boss.wx, boss.wy) < 56) ||
+      (dog  && wdist(s.wx, s.wy, dog.wx, dog.wy)  < 32);
+    if (hitEnemy || s.life <= 0) { smazakBoom(s.wx, s.wy); s.dead = true; }
   }
   smazaks = smazaks.filter(s => !s.dead);
 
@@ -936,7 +993,7 @@ function drawMuteBtn() {
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
   ctx.globalAlpha = 1;
   ctx.font = '16px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(musicMuted ? '🔇' : '🔊', x, y+1);
+  ctx.fillText(muted ? '🔇' : '🔊', x, y+1);
 }
 
 function drawPopups() {
@@ -1031,6 +1088,14 @@ function drawMenu() {
   ctx.restore();
   menuBtn = { x: bx, y: by, w: bw, h: bh };
 
+  // --- Tlačítko Nastavení / Top smažky (pod hlavním tlačítkem) ---
+  const stxt = '⚙️ NASTAVENÍ  ·  🏆 TOP SMAŽKY';
+  ctx.font = 'bold 15px Oswald, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const sw2 = ctx.measureText(stxt).width, syy = by + bh + 30;
+  ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.strokeText(stxt, VW/2, syy);
+  ctx.fillStyle = '#fff'; ctx.fillText(stxt, VW/2, syy);
+  settingsBtn = { x: VW/2 - sw2/2 - 10, y: syy - 16, w: sw2 + 20, h: 32 };
+
   // --- Nick (změnit) vlevo nahoře ---
   ctx.font = `600 14px Oswald, sans-serif`;
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -1045,7 +1110,7 @@ function drawMenu() {
     ctx.textAlign = 'right';
     ctx.lineWidth = 3; ctx.strokeStyle = '#000';
     ctx.font = 'bold 14px Oswald, sans-serif';
-    ctx.strokeText('🏆 TOP', VW-14, 22); ctx.fillStyle = '#ffd23f'; ctx.fillText('🏆 TOP', VW-14, 22);
+    ctx.strokeText('🏆 TOP SMAŽKY', VW-14, 22); ctx.fillStyle = '#ffd23f'; ctx.fillText('🏆 TOP SMAŽKY', VW-14, 22);
     ctx.font = '600 13px Oswald, sans-serif';
     lb.forEach((e, i) => {
       const t = `${i+1}. ${e.name} — ${e.score}`;
@@ -1108,7 +1173,7 @@ function drawGameOver() {
   let ly = yy + 64;
   ctx.font = 'bold 16px Oswald, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.lineWidth = 3; ctx.strokeStyle = '#000';
-  ctx.strokeText('🏆 LEADERBOARD', VW/2, ly); ctx.fillStyle = '#ffd23f'; ctx.fillText('🏆 LEADERBOARD', VW/2, ly);
+  ctx.strokeText('🏆 TOP SMAŽKY', VW/2, ly); ctx.fillStyle = '#ffd23f'; ctx.fillText('🏆 TOP SMAŽKY', VW/2, ly);
   ly += 26;
   ctx.font = '600 15px Oswald, sans-serif';
   let shownMe = false;
