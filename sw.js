@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v3';
+const CACHE = 'smazak-v4';
 const FILES = [
   './',
   './index.html',
@@ -7,7 +7,6 @@ const FILES = [
   './manifest.json',
   './assets/simmy.jpeg',
   './assets/menu_bg.png',
-  './assets/sprite.png',
 ];
 
 self.addEventListener('install', e => {
