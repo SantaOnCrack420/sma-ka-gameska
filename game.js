@@ -162,6 +162,7 @@ function touchStart(x, y, id) {
   if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
   if (state !== 'PLAYING') { startOrClick(); return; }
   if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) { throwSmazak(); return; }
+  if (fryBtn && Math.hypot(x - fryBtn.x, y - fryBtn.y) < fryBtn.r + 8) { firing = true; fireTouch = id; shootCd = 0; return; }
   joy.active = true; joy.id = id; joy.baseX = x; joy.baseY = y; joy.dx = 0; joy.dy = 0;
 }
 function touchMove(x, y, id) {
@@ -174,6 +175,7 @@ function touchMove(x, y, id) {
 }
 function touchEnd(id) {
   if (joy.id === id) { joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0; }
+  if (fireTouch === id) { firing = false; fireTouch = -1; }
 }
 canvas.addEventListener('touchstart', e => { e.preventDefault(); for (const t of e.changedTouches) touchStart(t.clientX, t.clientY, t.identifier); }, {passive:false});
 canvas.addEventListener('touchmove',  e => { e.preventDefault(); for (const t of e.changedTouches) touchMove(t.clientX, t.clientY, t.identifier); }, {passive:false});
@@ -182,9 +184,11 @@ canvas.addEventListener('mousedown', e => {
   const x = e.clientX, y = e.clientY;
   if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
   if (state === 'PLAYING') {
-    if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) throwSmazak();
+    if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) { throwSmazak(); return; }
+    if (fryBtn && Math.hypot(x - fryBtn.x, y - fryBtn.y) < fryBtn.r + 8) { firing = true; shootCd = 0; }
   } else startOrClick();
 });
+window.addEventListener('mouseup', () => { firing = false; });
 
 // ---------- Herní stav ----------
 const PLAZA_WX = 19.5 * TILE;   // střed Náměstí Míru (cogani)
@@ -207,6 +211,8 @@ let bannerText = '', bannerT = 0;
 let perkTriple = false, perkRapid = false;
 let smazakCd = 0;
 let smazakBtn = null;
+let fryBtn = null;
+let firing = false, fireTouch = -1;
 let muteBtn = null;
 function toggleMute() { musicMuted = !musicMuted; if (!musicMuted && !musicStarted) startMusic(); setMusicVol(); }
 
@@ -231,6 +237,7 @@ function startGame() {
   fries = []; pigeons = []; particles = []; npcs = []; cogani = []; bags = []; smazaks = []; popups = [];
   wave = 0; waveState = 'BREAK'; breakT = 90; boss = null; dog = null;
   bannerText = ''; bannerT = 0; perkTriple = false; perkRapid = false; smazakCd = 0;
+  firing = false; fireTouch = -1;
   player.wx = 7*TILE+32; player.wy = 8*TILE+32;
   player.vx = 0; player.vy = 0; player.boostT = 0;
   cam.x = player.wx; cam.y = player.wy;
@@ -424,7 +431,8 @@ function update() {
   cam.x = player.wx; cam.y = player.wy;
 
   if (shootCd > 0) shootCd--;
-  if (pigeons.length && shootCd === 0) shoot();
+  // manuální střelba: drž tlačítko hranolky / mezerník
+  if ((firing || keys[' ']) && shootCd === 0) shoot();
 
   for (const f of fries) {
     f.wx = (f.wx + f.vx + WPX) % WPX;
@@ -817,8 +825,22 @@ function drawBanner() {
   ctx.globalAlpha = 1;
 }
 
+function drawFryBtn() {
+  const r = 46, x = VW - r - 20, y = VH - r - 24;
+  fryBtn = { x, y, r };
+  ctx.globalAlpha = firing ? 1 : 0.9;
+  ctx.fillStyle = firing ? '#ffd23f' : '#c0392b';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.font = '30px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('🍟', x, y-6);
+  ctx.font = 'bold 11px Oswald, sans-serif'; ctx.fillStyle = firing ? '#000' : '#fff';
+  ctx.fillText('HOĎ', x, y+18);
+}
+
 function drawSmazakBtn() {
-  const r = 38, x = VW - r - 24, y = VH - r - 90;
+  const r = 34, x = VW - r - 30, y = VH - 200;
   smazakBtn = { x, y, r };
   const ready = smazakCd <= 0;
   ctx.globalAlpha = ready ? 0.9 : 0.4;
@@ -846,7 +868,7 @@ function drawFries() {
 }
 
 function drawMuteBtn() {
-  const r = 16, x = VW - r - 14, y = VH - r - 14;
+  const r = 16, x = VW - r - 14, y = 112;
   muteBtn = { x, y, r };
   ctx.globalAlpha = 0.7;
   ctx.fillStyle = '#000';
@@ -1036,6 +1058,7 @@ function loop() {
     drawPopups();
     drawBanner();
     drawBossHpBar();
+    drawFryBtn();
     drawSmazakBtn();
     drawMuteBtn();
     drawJoystick();
