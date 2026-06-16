@@ -278,23 +278,21 @@ const player = {
 const cam = { x: player.wx, y: player.wy };
 let facing = 1;   // 1 = doprava, -1 = doleva
 
-function wts(wx, wy) {
-  let dx = wx - cam.x, dy = wy - cam.y;
-  if (dx >  WPX/2) dx -= WPX;
-  if (dx < -WPX/2) dx += WPX;
-  if (dy >  WPY/2) dy -= WPY;
-  if (dy < -WPY/2) dy += WPY;
-  return [VW/2 + dx, VH/2 + dy];
+const clamp = (v, lo, hi) => v < lo ? lo : (v > hi ? hi : v);
+// kamera se drží v hranicích mapy (na kraji se zastaví), ale když je
+// obrazovka větší než svět, vystředí se.
+function updateCam() {
+  cam.x = WPX > VW ? clamp(player.wx, VW/2, WPX - VW/2) : WPX/2;
+  cam.y = WPY > VH ? clamp(player.wy, VH/2, WPY - VH/2) : WPY/2;
 }
-function wdist(ax, ay, bx, by) {
-  let dx = Math.abs(ax - bx), dy = Math.abs(ay - by);
-  if (dx > WPX/2) dx = WPX - dx;
-  if (dy > WPY/2) dy = WPY - dy;
-  return Math.hypot(dx, dy);
-}
+// svět → obrazovka (ohraničený, bez wrapu)
+function wts(wx, wy) { return [VW/2 + (wx - cam.x), VH/2 + (wy - cam.y)]; }
+// vzdálenost (bez wrapu)
+function wdist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+// mimo mapu = zeď
 function isSolidAt(wx, wy) {
-  const c = ((Math.floor(wx/TILE) % COLS) + COLS) % COLS;
-  const r = ((Math.floor(wy/TILE) % ROWS) + ROWS) % ROWS;
+  const c = Math.floor(wx / TILE), r = Math.floor(wy / TILE);
+  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return true;
   return SOLID.has(at(c, r));
 }
 
@@ -399,7 +397,7 @@ function startGame() {
   firing = false; fireTouch = -1;
   player.wx = SPAWN_WX; player.wy = SPAWN_WY;
   player.vx = 0; player.vy = 0; player.boostT = 0;
-  cam.x = player.wx; cam.y = player.wy;
+  updateCam();
   for (let i = 0; i < 8; i++) spawnPigeon();
   for (let i = 0; i < 4; i++) spawnBag();
   showHud(true);
@@ -451,8 +449,8 @@ function spawnCoganRing(hp = 2) {
   for (let tries = 0; tries < 12; tries++) {
     const ang = Math.random()*Math.PI*2;
     const dist = 420 + Math.random()*240;
-    const wx = (player.wx + Math.cos(ang)*dist + WPX) % WPX;
-    const wy = (player.wy + Math.sin(ang)*dist + WPY) % WPY;
+    const wx = player.wx + Math.cos(ang)*dist;
+    const wy = player.wy + Math.sin(ang)*dist;
     if (isSolidAt(wx, wy)) continue;
     cogani.push({ wx, wy, t: Math.random()*100, hp, hit: 0 });
     return;
@@ -476,11 +474,11 @@ function startNextWave() {
 function spawnBossWave() {
   const ang = Math.random()*Math.PI*2, dist = 560;
   boss = {
-    wx: (player.wx + Math.cos(ang)*dist + WPX) % WPX,
-    wy: (player.wy + Math.sin(ang)*dist + WPY) % WPY,
+    wx: player.wx + Math.cos(ang)*dist,
+    wy: player.wy + Math.sin(ang)*dist,
     t: 0, hp: 28 + wave*4, maxhp: 28 + wave*4, hit: 0,
   };
-  dog = { wx: (boss.wx + 50) % WPX, wy: boss.wy, t: 0, hp: 3, hit: 0 };
+  dog = { wx: boss.wx + 50, wy: boss.wy, t: 0, hp: 3, hit: 0 };
   for (let i = 0; i < 3; i++) spawnCoganRing();
   banner('☠ PECO ÚTOČÍ S MAČETOU — BACHA, BOSS FIGHT! xd', 200); sfx('boss', 0.8);
 }
@@ -517,8 +515,6 @@ function shoot() {
   let ang = player.angle - Math.PI/2;
   if (best) {
     let dx = best.wx - player.wx, dy = best.wy - player.wy;
-    if (dx >  WPX/2) dx -= WPX; if (dx < -WPX/2) dx += WPX;
-    if (dy >  WPY/2) dy -= WPY; if (dy < -WPY/2) dy += WPY;
     ang = Math.atan2(dy, dx);
   }
   const sp = 8;
@@ -542,8 +538,6 @@ function throwSmazak() {
   let ang = player.angle - Math.PI/2;
   if (tx !== null) {
     let dx = tx - player.wx, dy = ty - player.wy;
-    if (dx >  WPX/2) dx -= WPX; if (dx < -WPX/2) dx += WPX;
-    if (dy >  WPY/2) dy -= WPY; if (dy < -WPY/2) dy += WPY;
     ang = Math.atan2(dy, dx);
   }
   smazaks.push({ wx: player.wx, wy: player.wy, vx: Math.cos(ang)*6, vy: Math.sin(ang)*6, life: 55, t: 0 });
@@ -590,20 +584,19 @@ function update() {
   } else { player.vx *= 0.7; player.vy *= 0.7; }
 
   let nx = player.wx + player.vx;
-  if (!isSolidAt(nx, player.wy)) player.wx = (nx + WPX) % WPX;
+  if (!isSolidAt(nx, player.wy)) player.wx = nx;
   let ny = player.wy + player.vy;
-  if (!isSolidAt(player.wx, ny)) player.wy = (ny + WPY) % WPY;
+  if (!isSolidAt(player.wx, ny)) player.wy = ny;
 
-  cam.x = player.wx; cam.y = player.wy;
+  updateCam();
 
   if (shootCd > 0) shootCd--;
   // manuální střelba: drž tlačítko hranolky / mezerník
   if ((firing || keys[' ']) && shootCd === 0) shoot();
 
   for (const f of fries) {
-    f.wx = (f.wx + f.vx + WPX) % WPX;
-    f.wy = (f.wy + f.vy + WPY) % WPY;
-    f.life--;
+    f.wx += f.vx; f.wy += f.vy; f.life--;
+    if (isSolidAt(f.wx, f.wy)) f.life = 0;
     for (const p of pigeons) {
       if (p.hp > 0 && wdist(f.wx, f.wy, p.wx, p.wy) < 22) {
         p.hp = 0; f.life = 0;
@@ -618,8 +611,8 @@ function update() {
   for (const p of pigeons) {
     p.t += 0.04;
     const vx = Math.cos(p.t*1.3)*0.8, vy = Math.sin(p.t)*0.8;
-    let npx = (p.wx + vx + WPX) % WPX;
-    let npy = (p.wy + vy + WPY) % WPY;
+    let npx = p.wx + vx;
+    let npy = p.wy + vy;
     if (!isSolidAt(npx, p.wy)) p.wx = npx;
     if (!isSolidAt(p.wx, npy)) p.wy = npy;
   }
@@ -632,10 +625,8 @@ function update() {
   if (bannerT > 0) bannerT--;
   const chase = (e, spd) => {           // pohyb entity směrem k hráči
     let dx = player.wx - e.wx, dy = player.wy - e.wy;
-    if (dx >  WPX/2) dx -= WPX; if (dx < -WPX/2) dx += WPX;
-    if (dy >  WPY/2) dy -= WPY; if (dy < -WPY/2) dy += WPY;
     const l = Math.hypot(dx, dy) || 1;
-    const exp = (e.wx + dx/l*spd + WPX) % WPX, eyp = (e.wy + dy/l*spd + WPY) % WPY;
+    const exp = e.wx + dx/l*spd, eyp = e.wy + dy/l*spd;
     if (!isSolidAt(exp, e.wy)) e.wx = exp;
     if (!isSolidAt(e.wx, eyp)) e.wy = eyp;
     return Math.hypot(dx, dy);
@@ -704,8 +695,7 @@ function update() {
   // --- smažák speciál ---
   for (const s of smazaks) {
     s.t += 0.3;
-    s.wx = (s.wx + s.vx + WPX) % WPX;
-    s.wy = (s.wy + s.vy + WPY) % WPY;
+    s.wx += s.vx; s.wy += s.vy;
     s.life--;
     // vybuchne při zásahu nepřítele (ne až na konci dráhy)
     const hitEnemy =
@@ -765,130 +755,120 @@ const MAP_LABELS = [
   { x: 13.5, y: 24, t: 'NÁMĚSTÍ ČSA', s: 13, col: '#ffffff' },
 ];
 
-// Předrenderuj celou mapu JEDNOU do offscreen plátna (pak se jen blituje).
-let worldCanvas = null;
-function buildWorldCanvas() {
-  worldCanvas = document.createElement('canvas');
-  worldCanvas.width = WPX; worldCanvas.height = WPY;
-  const g = worldCanvas.getContext('2d');
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const t = at(c, r);
-      const x = c*TILE, y = r*TILE;
-      const bUp    = at(c, (r-1+ROWS)%ROWS) === T.BUILDING;
-      const bDown  = at(c, (r+1)%ROWS)      === T.BUILDING;
-      const bLeft  = at((c-1+COLS)%COLS, r)  === T.BUILDING;
-      const bRight = at((c+1)%COLS, r)       === T.BUILDING;
+const isB = (c, r) => c >= 0 && c < COLS && r >= 0 && r < ROWS && at(c, r) === T.BUILDING;
 
-      g.fillStyle = TCOL[t];
-      g.fillRect(x, y, TILE, TILE);
+// vykresli JEDNU dlaždici na screen pozici x,y (celá čísla)
+function paintTile(g, c, r, x, y) {
+  const t = at(c, r);
+  const bUp = isB(c, r-1), bDown = isB(c, r+1), bLeft = isB(c-1, r), bRight = isB(c+1, r);
 
-      if (t !== T.BUILDING && bUp) {
-        g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x, y, TILE, 9);
-      }
-      if (t === T.ROAD) {
-        g.fillStyle = 'rgba(255,210,80,0.5)';
-        g.fillRect(x + TILE/2 - 2, y + 12, 4, 16);
-        g.fillRect(x + TILE/2 - 2, y + 36, 4, 16);
-      } else if (t === T.BUILDING) {
-        // červená střecha (jako reálné náměstí)
-        g.fillStyle = '#9c4f3f'; g.fillRect(x, y, TILE, TILE);
-        g.fillStyle = 'rgba(0,0,0,0.10)';
-        for (let i = 8; i < TILE; i += 12) g.fillRect(x, y + i, TILE, 2);   // tašky
-        if (!bUp)   { g.fillStyle = 'rgba(255,255,255,0.14)'; g.fillRect(x, y, TILE, 5); }
-        if (!bRight){ g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x + TILE-6, y, 6, TILE); }
-        if (!bLeft) { g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(x, y, 4, TILE); }
-        if (!bDown) {
-          // fasáda do výšky se dvěma řadami oken
-          g.fillStyle = '#d9c7a3'; g.fillRect(x, y + TILE-26, TILE, 26);
-          g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x, y + TILE-26, TILE, 2);
-          g.fillStyle = 'rgba(90,120,160,0.75)';
-          for (const wx of [6, 24, 42]) {
-            g.fillRect(x + wx, y + TILE-22, 9, 7);
-            g.fillRect(x + wx, y + TILE-11, 9, 7);
-          }
-        } else {
-          g.fillStyle = 'rgba(0,0,0,0.10)';
-          g.fillRect(x + 10, y + 16, 12, 12);
-          g.fillRect(x + 34, y + 16, 12, 12);
-        }
-      } else if (t === T.GRASS) {
-        g.fillStyle = 'rgba(0,0,0,0.06)';
-        g.fillRect(x + 14, y + 20, 4, 4);
-        g.fillRect(x + 40, y + 44, 4, 4);
-      } else if (t === T.WATER) {
-        g.fillStyle = 'rgba(255,255,255,0.10)';
-        g.fillRect(x + 8, y + 20, 20, 3);
-        g.fillRect(x + 30, y + 40, 20, 3);
-      } else if (t === T.BRIDGE) {
-        g.fillStyle = 'rgba(0,0,0,0.25)';          // prkna mostu
-        for (let i = 0; i < TILE; i += 10) g.fillRect(x, y + i, TILE, 2);
-        g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x, y, 3, TILE); g.fillRect(x+TILE-3, y, 3, TILE);
-      } else if (t === T.POLAND) {
-        g.fillStyle = 'rgba(255,255,255,0.05)';
-        g.fillRect(x + 18, y + 26, 5, 5);
-      }
-    }
+  g.fillStyle = TCOL[t];
+  g.fillRect(x, y, TILE, TILE);
+
+  if (t !== T.BUILDING && bUp) {
+    g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x, y, TILE, 9);
   }
-
-  // --- props (kašna, stromy, lavičky, auta, stánky, lampy) ---
-  for (const p of PROPS) {
-    const px = p.x * TILE, py = p.y * TILE;
-    if (p.type === 'fountain') {
-      const R = p.r * TILE;
-      g.fillStyle = '#7d7468'; g.beginPath(); g.arc(px, py, R, 0, Math.PI*2); g.fill();      // kamenný věnec
-      g.fillStyle = '#9a9086'; g.beginPath(); g.arc(px, py, R-6, 0, Math.PI*2); g.fill();
-      g.fillStyle = '#3f7fb0'; g.beginPath(); g.arc(px, py, R-14, 0, Math.PI*2); g.fill();    // voda
-      g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.arc(px, py, 6, 0, Math.PI*2); g.fill(); // tryska
-    } else if (p.type === 'tree') {
-      g.fillStyle = 'rgba(0,0,0,0.18)'; g.beginPath(); g.ellipse(px, py+14, 16, 6, 0, 0, Math.PI*2); g.fill();
-      g.fillStyle = '#2f6b2f'; g.beginPath(); g.arc(px, py, 17, 0, Math.PI*2); g.fill();
-      g.fillStyle = '#3c8a3c'; g.beginPath(); g.arc(px-5, py-5, 11, 0, Math.PI*2); g.fill();
-    } else if (p.type === 'bench') {
-      g.save(); g.translate(px, py); if (p.h) g.rotate(Math.PI/2);
-      g.fillStyle = '#6b4a2c'; g.fillRect(-16, -5, 32, 10);
-      g.fillStyle = '#5a3d24'; g.fillRect(-16, -7, 32, 3);
-      g.restore();
-    } else if (p.type === 'car') {
-      g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(px-15, py-9, 32, 22);
-      g.fillStyle = p.col; g.fillRect(px-15, py-9, 30, 20);
-      g.fillStyle = 'rgba(180,220,255,0.7)'; g.fillRect(px-12, py-5, 24, 6);
-    } else if (p.type === 'stall') {
-      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(px-20, py-12, 42, 26);
-      g.fillStyle = '#e8e8e8'; g.fillRect(px-20, py-12, 40, 24);       // bílá markýza
-      g.fillStyle = '#cc3333'; for (let i=0;i<4;i++) g.fillRect(px-20+i*10, py-12, 5, 24); // pruhy
-    } else if (p.type === 'lamp') {
-      g.fillStyle = '#333'; g.fillRect(px-2, py-2, 4, 16);
-      g.fillStyle = '#ffe9a0'; g.beginPath(); g.arc(px, py-4, 5, 0, Math.PI*2); g.fill();
+  if (t === T.ROAD) {
+    g.fillStyle = 'rgba(255,210,80,0.5)';
+    g.fillRect(x + TILE/2 - 2, y + 12, 4, 16);
+    g.fillRect(x + TILE/2 - 2, y + 36, 4, 16);
+  } else if (t === T.BUILDING) {
+    g.fillStyle = '#9c4f3f'; g.fillRect(x, y, TILE, TILE);     // červená střecha
+    g.fillStyle = 'rgba(0,0,0,0.10)';
+    for (let i = 8; i < TILE; i += 12) g.fillRect(x, y + i, TILE, 2);
+    if (!bUp)   { g.fillStyle = 'rgba(255,255,255,0.14)'; g.fillRect(x, y, TILE, 5); }
+    if (!bRight){ g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x + TILE-6, y, 6, TILE); }
+    if (!bLeft) { g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(x, y, 4, TILE); }
+    if (!bDown) {
+      g.fillStyle = '#d9c7a3'; g.fillRect(x, y + TILE-26, TILE, 26);
+      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x, y + TILE-26, TILE, 2);
+      g.fillStyle = 'rgba(90,120,160,0.75)';
+      for (const wx of [6, 24, 42]) {
+        g.fillRect(x + wx, y + TILE-22, 9, 7);
+        g.fillRect(x + wx, y + TILE-11, 9, 7);
+      }
+    } else {
+      g.fillStyle = 'rgba(0,0,0,0.10)';
+      g.fillRect(x + 10, y + 16, 12, 12);
+      g.fillRect(x + 34, y + 16, 12, 12);
     }
-  }
-
-  // --- popisky míst ---
-  g.textAlign = 'center'; g.textBaseline = 'middle';
-  for (const L of MAP_LABELS) {
-    g.save();
-    g.translate(L.x*TILE + TILE/2, L.y*TILE + TILE/2);
-    if (L.rot) g.rotate(L.rot);
-    g.font = `bold ${L.s}px Oswald, Impact, sans-serif`;
-    g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,0.8)';
-    g.strokeText(L.t, 0, 0);
-    g.fillStyle = L.col || '#ffffff';
-    g.fillText(L.t, 0, 0);
-    g.restore();
+  } else if (t === T.GRASS) {
+    g.fillStyle = 'rgba(0,0,0,0.06)';
+    g.fillRect(x + 14, y + 20, 4, 4);
+    g.fillRect(x + 40, y + 44, 4, 4);
+  } else if (t === T.WATER) {
+    g.fillStyle = 'rgba(255,255,255,0.10)';
+    g.fillRect(x + 8, y + 20, 20, 3);
+    g.fillRect(x + 30, y + 40, 20, 3);
+  } else if (t === T.BRIDGE) {
+    g.fillStyle = 'rgba(0,0,0,0.25)';
+    for (let i = 0; i < TILE; i += 10) g.fillRect(x, y + i, TILE, 2);
+    g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x, y, 3, TILE); g.fillRect(x+TILE-3, y, 3, TILE);
+  } else if (t === T.POLAND) {
+    g.fillStyle = 'rgba(255,255,255,0.05)';
+    g.fillRect(x + 18, y + 26, 5, 5);
   }
 }
 
+function drawProp(p) {
+  const [x, y] = wts(p.x*TILE, p.y*TILE);
+  if (x < -60 || x > VW+60 || y < -60 || y > VH+60) return;
+  const g = ctx; g.save(); g.translate(x, y);
+  if (p.type === 'fountain') {
+    const R = p.r * TILE;
+    g.fillStyle = '#7d7468'; g.beginPath(); g.arc(0, 0, R, 0, Math.PI*2); g.fill();
+    g.fillStyle = '#9a9086'; g.beginPath(); g.arc(0, 0, R-6, 0, Math.PI*2); g.fill();
+    g.fillStyle = '#3f7fb0'; g.beginPath(); g.arc(0, 0, R-14, 0, Math.PI*2); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.arc(0, 0, 6, 0, Math.PI*2); g.fill();
+  } else if (p.type === 'tree') {
+    g.fillStyle = 'rgba(0,0,0,0.18)'; g.beginPath(); g.ellipse(0, 14, 16, 6, 0, 0, Math.PI*2); g.fill();
+    g.fillStyle = '#2f6b2f'; g.beginPath(); g.arc(0, 0, 17, 0, Math.PI*2); g.fill();
+    g.fillStyle = '#3c8a3c'; g.beginPath(); g.arc(-5, -5, 11, 0, Math.PI*2); g.fill();
+  } else if (p.type === 'bench') {
+    if (p.h) g.rotate(Math.PI/2);
+    g.fillStyle = '#6b4a2c'; g.fillRect(-16, -5, 32, 10);
+    g.fillStyle = '#5a3d24'; g.fillRect(-16, -7, 32, 3);
+  } else if (p.type === 'car') {
+    g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(-15, -9, 32, 22);
+    g.fillStyle = p.col; g.fillRect(-15, -9, 30, 20);
+    g.fillStyle = 'rgba(180,220,255,0.7)'; g.fillRect(-12, -5, 24, 6);
+  } else if (p.type === 'stall') {
+    g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(-20, -12, 42, 26);
+    g.fillStyle = '#e8e8e8'; g.fillRect(-20, -12, 40, 24);
+    g.fillStyle = '#cc3333'; for (let i=0;i<4;i++) g.fillRect(-20+i*10, -12, 5, 24);
+  } else if (p.type === 'lamp') {
+    g.fillStyle = '#333'; g.fillRect(-2, -2, 4, 16);
+    g.fillStyle = '#ffe9a0'; g.beginPath(); g.arc(0, -4, 5, 0, Math.PI*2); g.fill();
+  }
+  g.restore();
+}
+
+function drawLabel(L) {
+  const [x, y] = wts(L.x*TILE + TILE/2, L.y*TILE + TILE/2);
+  if (x < -120 || x > VW+120 || y < -40 || y > VH+40) return;
+  ctx.save(); ctx.translate(x, y); if (L.rot) ctx.rotate(L.rot);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `bold ${L.s}px Oswald, Impact, sans-serif`;
+  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText(L.t, 0, 0);
+  ctx.fillStyle = L.col || '#ffffff'; ctx.fillText(L.t, 0, 0);
+  ctx.restore();
+}
+
+// vykresli JEN viditelné dlaždice (zvládne libovolně velkou mapu)
 function drawMap() {
-  if (!worldCanvas) buildWorldCanvas();
-  // blit předrenderované mapy s wrapem; celá čísla = žádné švy/blikání
-  const ox = Math.round(VW/2 - cam.x);
-  const oy = Math.round(VH/2 - cam.y);
-  for (let gx = -1; gx <= 1; gx++)
-    for (let gy = -1; gy <= 1; gy++) {
-      const dx = ox + gx*WPX, dy = oy + gy*WPY;
-      if (dx < VW && dx + WPX > 0 && dy < VH && dy + WPY > 0)
-        ctx.drawImage(worldCanvas, dx, dy);
+  ctx.fillStyle = '#10101c'; ctx.fillRect(0, 0, VW, VH);   // mimo mapu = tma
+  const startC = Math.max(0, Math.floor((cam.x - VW/2) / TILE) - 1);
+  const endC   = Math.min(COLS-1, Math.floor((cam.x + VW/2) / TILE) + 1);
+  const startR = Math.max(0, Math.floor((cam.y - VH/2) / TILE) - 1);
+  const endR   = Math.min(ROWS-1, Math.floor((cam.y + VH/2) / TILE) + 1);
+  for (let r = startR; r <= endR; r++)
+    for (let c = startC; c <= endC; c++) {
+      const sx = Math.round(VW/2 + (c*TILE - cam.x));
+      const sy = Math.round(VH/2 + (r*TILE - cam.y));
+      paintTile(ctx, c, r, sx, sy);
     }
+  for (const p of PROPS) drawProp(p);
+  for (const L of MAP_LABELS) drawLabel(L);
 }
 
 function drawPlayer() {
