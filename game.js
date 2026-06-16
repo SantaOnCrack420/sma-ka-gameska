@@ -173,14 +173,18 @@ const scoreEl = document.getElementById('score');
 const livesEl = document.getElementById('lives');
 function showHud(on) { if (ui) ui.style.display = on ? 'flex' : 'none'; }
 
-// ---------- Svět ----------
+// ---------- Svět (model centra Českého Těšína) ----------
 const TILE = 64;
-const COLS = 32, ROWS = 32;
+const COLS = 40, ROWS = 52;
 const WPX = COLS * TILE;
 const WPY = ROWS * TILE;
 
-const T = { GRASS:0, ROAD:1, SIDEWALK:2, BUILDING:3, PLAZA:4, WATER:5 };
-const SOLID = new Set([T.BUILDING, T.WATER]);
+const T = { GRASS:0, ROAD:1, SIDEWALK:2, BUILDING:3, PLAZA:4, WATER:5, BRIDGE:6, POLAND:7 };
+const SOLID = new Set([T.BUILDING, T.WATER]);   // most i polská strana = pochozí
+
+// startovní bod = Náměstí ČSA (dlažba)
+const SPAWN_WX = 20 * TILE + 32;
+const SPAWN_WY = 15 * TILE + 32;
 
 let map = new Int8Array(COLS * ROWS);
 const at = (c, r) => map[r * COLS + c];
@@ -190,40 +194,70 @@ function fill(c0, r0, c1, r1, t) {
       if (c >= 0 && c < COLS && r >= 0 && r < ROWS) map[r * COLS + c] = t;
 }
 
+// blok domů jen po obvodu, vnitřek = dvorek (pokud je dost velký)
+function courtBlock(c0, r0, c1, r1) {
+  for (let r = r0; r <= r1; r++)
+    for (let c = c0; c <= c1; c++) {
+      if (at(c, r) !== T.GRASS) continue;
+      const edge = (c === c0 || c === c1 || r === r0 || r === r1);
+      const bigEnough = (c1 - c0 >= 3 && r1 - r0 >= 3);
+      if (edge || !bigEnough) map[r * COLS + c] = T.BUILDING;
+    }
+}
+
 function buildMap() {
   map.fill(T.GRASS);
 
-  const HROADS = [6, 15, 24];
-  const VROADS = [6, 15, 24];
-  for (const r of HROADS) { fill(0, r-1, COLS-1, r-1, T.SIDEWALK); fill(0, r+1, COLS-1, r+1, T.SIDEWALK); }
-  for (const c of VROADS) { fill(c-1, 0, c-1, ROWS-1, T.SIDEWALK); fill(c+1, 0, c+1, ROWS-1, T.SIDEWALK); }
-  for (const r of HROADS) fill(0, r, COLS-1, r, T.ROAD);
-  for (const c of VROADS) fill(c, 0, c, ROWS-1, T.ROAD);
+  // vnější vodní rámec (hranice; wrap-seam = voda↔voda = neviditelný)
+  fill(0, 0, COLS-1, 3, T.WATER);
+  fill(0, ROWS-4, COLS-1, ROWS-1, T.WATER);
+  fill(0, 0, 3, ROWS-1, T.WATER);
+  fill(COLS-4, 0, COLS-1, ROWS-1, T.WATER);
 
-  // bloky budov mezi silnicemi
-  blockBuildings(8, 8, 13, 13);
-  blockBuildings(17, 8, 22, 13);
-  blockBuildings(8, 17, 13, 22);
-  blockBuildings(8, 26, 13, 30);
-  blockBuildings(26, 8, 30, 13);
-  blockBuildings(26, 17, 30, 22);
+  // --- Polsko (Cieszyn) — promenáda podél řeky ---
+  fill(4, 4, 9, ROWS-5, T.POLAND);
+  courtBlock(4, 7, 6, 12);
+  courtBlock(4, 18, 6, 24);
+  courtBlock(4, 32, 6, 40);
 
-  // Náměstí Míru
-  fill(17, 17, 22, 22, T.PLAZA);
+  // --- Řeka Olza ---
+  fill(10, 4, 12, ROWS-5, T.WATER);
+  // 3 mosty
+  fill(10, 6, 12, 7, T.BRIDGE);     // vlakový (sever)
+  fill(10, 26, 12, 27, T.BRIDGE);   // pěší (centrum)
+  fill(10, 40, 12, 41, T.BRIDGE);   // pěší (jih)
 
-  // Řeka Olza na východě
-  fill(29, 0, 31, ROWS-1, T.WATER);
-}
-function blockBuildings(c0, r0, c1, r1) {
-  for (let r = r0; r <= r1; r++)
-    for (let c = c0; c <= c1; c++)
-      if (at(c, r) === T.GRASS) map[r * COLS + c] = T.BUILDING;
+  // --- Český Těšín (východní strana) ---
+  const VR = [16, 24, 31];          // svislé ulice (Nábřežní, Hlavní třída, Nádražní)
+  const HR = [10, 20, 31, 43];      // vodorovné ulice
+  for (const c of VR) { fill(c-1, 4, c-1, ROWS-5, T.SIDEWALK); fill(c+1, 4, c+1, ROWS-5, T.SIDEWALK); }
+  for (const r of HR) { fill(13, r-1, COLS-5, r-1, T.SIDEWALK); fill(13, r+1, COLS-5, r+1, T.SIDEWALK); }
+  for (const c of VR) fill(c, 4, c, ROWS-5, T.ROAD);
+  for (const r of HR) fill(13, r, COLS-5, r, T.ROAD);
+
+  // bloky domů s dvorky
+  const blocks = [
+    [13,5,15,9],[17,5,23,9],[25,5,30,9],[32,5,35,9],
+    [13,12,15,18],[25,12,30,18],[32,12,35,18],
+    [13,22,15,29],[17,22,23,29],[25,22,30,29],[32,22,35,29],
+    [13,33,15,41],[17,33,23,41],[32,33,35,41],
+    [13,45,15,46],[17,45,23,46],[25,45,30,46],[32,45,35,46],
+  ];
+  for (const b of blocks) courtBlock(b[0], b[1], b[2], b[3]);
+
+  // Nábřežní promenáda (x13) — spojuje všechny 3 mosty s městem
+  fill(13, 4, 13, ROWS-5, T.SIDEWALK);
+
+  // Náměstí ČSA (dlažba)
+  fill(18, 12, 22, 18, T.PLAZA);
+  // Nádraží (velká budova, jih)
+  fill(25, 33, 30, 41, T.BUILDING);
 }
 
 // ---------- Hráč ----------
 const player = {
-  wx: 7 * TILE + 32,
-  wy: 8 * TILE + 32,
+  wx: SPAWN_WX,
+  wy: SPAWN_WY,
   vx: 0, vy: 0,
   speed: 3.4,
   angle: 0,
@@ -349,7 +383,7 @@ function startGame() {
   wave = 0; waveState = 'BREAK'; breakT = 90; boss = null; dog = null;
   bannerText = ''; bannerT = 0; perkTriple = false; perkRapid = false; smazakCd = 0;
   firing = false; fireTouch = -1;
-  player.wx = 7*TILE+32; player.wy = 8*TILE+32;
+  player.wx = SPAWN_WX; player.wy = SPAWN_WY;
   player.vx = 0; player.vy = 0; player.boostT = 0;
   cam.x = player.wx; cam.y = player.wy;
   for (let i = 0; i < 8; i++) spawnPigeon();
@@ -399,12 +433,18 @@ function spawnNpc() {
   if (p) npcs.push({ wx: p.wx, wy: p.wy, t: Math.random()*100, col: NPC_COLORS[(Math.random()*NPC_COLORS.length)|0], dir: Math.random()*Math.PI*2 });
 }
 function spawnCoganRing(hp = 2) {
-  // spawn v prstenci kolem hráče (přijdou z dálky)
-  const ang = Math.random()*Math.PI*2;
-  const dist = 480 + Math.random()*240;
-  const wx = (player.wx + Math.cos(ang)*dist + WPX) % WPX;
-  const wy = (player.wy + Math.sin(ang)*dist + WPY) % WPY;
-  cogani.push({ wx, wy, t: Math.random()*100, hp, hit: 0 });
+  // spawn v prstenci kolem hráče (na pochozím místě)
+  for (let tries = 0; tries < 12; tries++) {
+    const ang = Math.random()*Math.PI*2;
+    const dist = 420 + Math.random()*240;
+    const wx = (player.wx + Math.cos(ang)*dist + WPX) % WPX;
+    const wy = (player.wy + Math.sin(ang)*dist + WPY) % WPY;
+    if (isSolidAt(wx, wy)) continue;
+    cogani.push({ wx, wy, t: Math.random()*100, hp, hit: 0 });
+    return;
+  }
+  // nouzově blízko hráče
+  cogani.push({ wx: player.wx + 200, wy: player.wy, t: 0, hp, hit: 0 });
 }
 
 // ---------- Vlny ----------
@@ -701,7 +741,21 @@ const TCOL = {
   [T.BUILDING]:'#6b5d4f',
   [T.PLAZA]:   '#9a9086',
   [T.WATER]:   '#2f6a8f',
+  [T.BRIDGE]:  '#8a7b5e',
+  [T.POLAND]:  '#6f7c46',
 };
+
+// popisky míst (vypálené do mapy)
+const MAP_LABELS = [
+  { x: 20, y: 15, t: 'NÁMĚSTÍ ČSA', s: 15 },
+  { x: 20, y: 7,  t: 'RADNICE',     s: 13 },
+  { x: 27, y: 37, t: 'NÁDRAŽÍ',     s: 14 },
+  { x: 20, y: 26, t: 'HLAVNÍ TŘÍDA', s: 12, rot: -Math.PI/2, col2: '#ffe9a0' },
+  { x: 14, y: 25, t: 'KEBAB',       s: 12 },
+  { x: 28, y: 15, t: 'MUZEUM',      s: 12 },
+  { x: 6,  y: 27, t: 'POLSKO ▸ CIESZYN', s: 13, col: '#e8e0c0' },
+  { x: 11, y: 20, t: 'OLZA',        s: 12, rot: -Math.PI/2, col: '#cfe6ff' },
+];
 
 // Předrenderuj celou mapu JEDNOU do offscreen plátna (pak se jen blituje).
 let worldCanvas = null;
@@ -752,8 +806,29 @@ function buildWorldCanvas() {
         g.fillStyle = 'rgba(255,255,255,0.10)';
         g.fillRect(x + 8, y + 20, 20, 3);
         g.fillRect(x + 30, y + 40, 20, 3);
+      } else if (t === T.BRIDGE) {
+        g.fillStyle = 'rgba(0,0,0,0.25)';          // prkna mostu
+        for (let i = 0; i < TILE; i += 10) g.fillRect(x, y + i, TILE, 2);
+        g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x, y, 3, TILE); g.fillRect(x+TILE-3, y, 3, TILE);
+      } else if (t === T.POLAND) {
+        g.fillStyle = 'rgba(255,255,255,0.05)';
+        g.fillRect(x + 18, y + 26, 5, 5);
       }
     }
+  }
+
+  // --- popisky míst ---
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const L of MAP_LABELS) {
+    g.save();
+    g.translate(L.x*TILE + TILE/2, L.y*TILE + TILE/2);
+    if (L.rot) g.rotate(L.rot);
+    g.font = `bold ${L.s}px Oswald, Impact, sans-serif`;
+    g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,0.8)';
+    g.strokeText(L.t, 0, 0);
+    g.fillStyle = L.col || '#ffffff';
+    g.fillText(L.t, 0, 0);
+    g.restore();
   }
 }
 
