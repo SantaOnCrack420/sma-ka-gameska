@@ -29,6 +29,38 @@ const menuBg  = new Image(); menuBg.src  = 'assets/menu_bg.png';
 let charReady = false; charImg.onload = () => charReady = true;
 let menuReady = false; menuBg.onload  = () => menuReady = true;
 
+// ---------- Hudba ----------
+// Nahraj song jako assets/music.mp3 (nebo .ogg a změň příponu níže).
+const music = new Audio('assets/music.mp3');
+music.loop = true;
+music.volume = 1.0;
+let musicStarted = false, musicMuted = false;
+function startMusic() {
+  if (musicStarted || musicMuted) return;
+  music.play().then(() => { musicStarted = true; setMusicVol(); }).catch(() => {});
+}
+function setMusicVol() {
+  // menu = 100 %, ve hře ztlumeno na 50 % (ať jsou slyšet zvuky)
+  music.volume = musicMuted ? 0 : (state === 'PLAYING' ? 0.5 : 1.0);
+}
+// odemkni přehrávání při prvním dotyku/kliku/klávese (autoplay policy)
+['touchstart', 'mousedown', 'keydown'].forEach(ev =>
+  window.addEventListener(ev, startMusic));
+
+// ---------- Zvukové efekty (8-bit, vyměnitelné v assets/sfx/) ----------
+const SFX = {};
+['click','shoot','hit','kill','pickup','hurt','boom','boss','wave','gameover'].forEach(n => {
+  const a = new Audio('assets/sfx/' + n + '.wav'); a.preload = 'auto'; SFX[n] = a;
+});
+function sfx(name, vol = 1) {
+  if (musicMuted) return;
+  const base = SFX[name]; if (!base) return;
+  const a = base.cloneNode();
+  a.volume = vol;
+  a.playbackRate = 0.92 + Math.random() * 0.16;   // náhodný pitch ±8 % (ať to není strojové)
+  a.play().catch(() => {});
+}
+
 // ---------- HUD ----------
 const ui = document.getElementById('ui');
 const scoreEl = document.getElementById('score');
@@ -119,14 +151,16 @@ const keys = {};
 window.addEventListener('keydown', e => {
   keys[e.key] = true;
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
-  if ((e.key === 'Enter' || e.key === ' ') && state !== 'PLAYING') startGame();
+  if ((e.key === 'Enter' || e.key === ' ') && state !== 'PLAYING') startOrClick();
   if ((e.key === 'f' || e.key === 'F' || e.key === 'e' || e.key === 'E') && state === 'PLAYING') throwSmazak();
+  if (e.key === 'm' || e.key === 'M') toggleMute();
 });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
 
 const joy = { active: false, id: -1, baseX: 0, baseY: 0, dx: 0, dy: 0 };
 function touchStart(x, y, id) {
-  if (state !== 'PLAYING') { startGame(); return; }
+  if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
+  if (state !== 'PLAYING') { startOrClick(); return; }
   if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) { throwSmazak(); return; }
   joy.active = true; joy.id = id; joy.baseX = x; joy.baseY = y; joy.dx = 0; joy.dy = 0;
 }
@@ -144,7 +178,13 @@ function touchEnd(id) {
 canvas.addEventListener('touchstart', e => { e.preventDefault(); for (const t of e.changedTouches) touchStart(t.clientX, t.clientY, t.identifier); }, {passive:false});
 canvas.addEventListener('touchmove',  e => { e.preventDefault(); for (const t of e.changedTouches) touchMove(t.clientX, t.clientY, t.identifier); }, {passive:false});
 canvas.addEventListener('touchend',   e => { e.preventDefault(); for (const t of e.changedTouches) touchEnd(t.identifier); }, {passive:false});
-canvas.addEventListener('mousedown', () => { if (state !== 'PLAYING') startGame(); });
+canvas.addEventListener('mousedown', e => {
+  const x = e.clientX, y = e.clientY;
+  if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
+  if (state === 'PLAYING') {
+    if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) throwSmazak();
+  } else startOrClick();
+});
 
 // ---------- Herní stav ----------
 const PLAZA_WX = 19.5 * TILE;   // střed Náměstí Míru (cogani)
@@ -167,6 +207,15 @@ let bannerText = '', bannerT = 0;
 let perkTriple = false, perkRapid = false;
 let smazakCd = 0;
 let smazakBtn = null;
+let muteBtn = null;
+function toggleMute() { musicMuted = !musicMuted; if (!musicMuted && !musicStarted) startMusic(); setMusicVol(); }
+
+// menu tlačítko: klikací efekt
+let menuPress = 0, pendingStart = false;
+function startOrClick() {
+  if (state === 'MENU') { if (!pendingStart) { menuPress = 10; pendingStart = true; sfx('click'); } }
+  else startGame();
+}
 
 // juice: screen shake (trauma) + hitstop
 let trauma = 0, hitstop = 0;
@@ -189,6 +238,7 @@ function startGame() {
   for (let i = 0; i < 4; i++) spawnBag();
   showHud(true);
   updateHud();
+  setMusicVol();   // ztlum hudbu na 50 %
 }
 function banner(text, t) { bannerText = text; bannerT = t; }
 const DEATH_MSGS = [
@@ -203,6 +253,8 @@ function gameOver() {
   state = 'OVER'; showHud(false);
   deathMsg = DEATH_MSGS[(Math.random()*DEATH_MSGS.length)|0];
   saveBest();
+  sfx('gameover', 0.7);
+  setMusicVol();   // zpět na 100 %
 }
 function updateHud() {
   scoreEl.textContent = `SKÓRE: ${score}`;
@@ -244,7 +296,7 @@ function startNextWave() {
   } else {
     const n = 3 + wave*2;
     for (let i = 0; i < n; i++) spawnCoganRing();
-    banner('VLNA ' + wave + ' — JDOU CIGÁNI! (' + n + ')', 120);
+    banner('VLNA ' + wave + ' — JDOU CIGÁNI! (' + n + ')', 120); sfx('wave', 0.6);
   }
   waveState = 'FIGHT';
 }
@@ -257,7 +309,7 @@ function spawnBossWave() {
   };
   dog = { wx: (boss.wx + 50) % WPX, wy: boss.wy, t: 0, hp: 3, hit: 0 };
   for (let i = 0; i < 3; i++) spawnCoganRing();
-  banner('☠ PECO ÚTOČÍ S MAČETOU — BACHA, BOSS FIGHT! xd', 200);
+  banner('☠ PECO ÚTOČÍ S MAČETOU — BACHA, BOSS FIGHT! xd', 200); sfx('boss', 0.8);
 }
 function onWaveCleared() {
   waveState = 'BREAK'; breakT = 200;
@@ -265,7 +317,7 @@ function onWaveCleared() {
   if (!perkTriple)      { perkTriple = true; bonus = '🍟 TROJITÁ STŘELBA HRANOLEK!'; }
   else if (!perkRapid)  { perkRapid = true;  bonus = '⚡ RYCHLOPALBA!'; }
   else                  { lives = Math.min(6, lives+1); updateHud(); bonus = '+1 ❤️'; }
-  popup('✅ VLNA ' + wave + ' HOTOVA!');
+  popup('✅ VLNA ' + wave + ' HOTOVA!'); sfx('pickup', 0.5);
   popup(bonus);
 }
 function spawnBag() {
@@ -301,6 +353,7 @@ function shoot() {
   for (const a of angles)
     fries.push({ wx: player.wx, wy: player.wy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 70 });
   shootCd = perkRapid ? 9 : 18;
+  sfx('shoot', 0.22);
 }
 
 // ---------- Smažák (plošný speciál) ----------
@@ -324,7 +377,7 @@ function throwSmazak() {
   smazakCd = 300;   // ~5 s
 }
 function smazakBoom(wx, wy) {
-  addShake(0.55); freeze(4);
+  addShake(0.55); freeze(4); sfx('boom', 0.7);
   boom(wx, wy, '#e8a020', 26);
   boom(wx, wy, '#f4c430', 18);
   const R = 95;
@@ -418,7 +471,7 @@ function update() {
     if (c.hit > 0) c.hit--;
     const d = chase(c, 1.5);
     if (d < 28 && hurtCd === 0) {
-      lives--; hurtCd = 90; updateHud(); addShake(0.45);
+      lives--; hurtCd = 90; updateHud(); addShake(0.45); sfx('hurt', 0.6);
       boom(player.wx, player.wy, '#ff3b3b', 12);
       popup('🤕 Cigán tě dostal!');
       if (lives <= 0) { gameOver(); return; }
@@ -430,8 +483,8 @@ function update() {
     for (const c of cogani) {
       if (c.hp > 0 && wdist(f.wx, f.wy, c.wx, c.wy) < 24) {
         c.hp--; c.hit = 10; f.life = 0;
-        boom(c.wx, c.wy, '#e8a020', 8);
-        if (c.hp <= 0) { score += 25; coganKills++; updateHud(); boom(c.wx, c.wy, '#ff3b3b', 14); addShake(0.22); }
+        boom(c.wx, c.wy, '#e8a020', 8); sfx('hit', 0.4);
+        if (c.hp <= 0) { score += 25; coganKills++; updateHud(); boom(c.wx, c.wy, '#ff3b3b', 14); addShake(0.22); sfx('kill', 0.5); }
       }
     }
   }
@@ -442,7 +495,7 @@ function update() {
     boss.t += 0.05; if (boss.hit > 0) boss.hit--;
     const d = chase(boss, 1.1);
     if (d < 46 && hurtCd === 0) {
-      lives--; hurtCd = 90; updateHud(); addShake(0.45);
+      lives--; hurtCd = 90; updateHud(); addShake(0.45); sfx('hurt', 0.6);
       boom(player.wx, player.wy, '#ff3b3b', 16);
       popup('🔪 Peco tě seknul mačetou!');
       if (lives <= 0) { gameOver(); return; }
@@ -453,7 +506,7 @@ function update() {
       }
     }
     if (boss.hp <= 0) {
-      boom(boss.wx, boss.wy, '#ff3b3b', 40); score += 200; updateHud(); addShake(0.85); freeze(6);
+      boom(boss.wx, boss.wy, '#ff3b3b', 40); score += 200; updateHud(); addShake(0.85); freeze(6); sfx('kill', 0.7);
       popup('🏆 PECO PADL! +200'); boss = null; dog = null;
     }
   }
@@ -461,7 +514,7 @@ function update() {
     dog.t += 0.05; if (dog.hit > 0) dog.hit--;
     const d = chase(dog, 2.2);
     if (d < 24 && hurtCd === 0) {
-      lives--; hurtCd = 90; updateHud(); addShake(0.45);
+      lives--; hurtCd = 90; updateHud(); addShake(0.45); sfx('hurt', 0.6);
       boom(player.wx, player.wy, '#ff3b3b', 10);
       popup('🐕 Pečův pes tě kousnul!');
       if (lives <= 0) { gameOver(); return; }
@@ -498,6 +551,7 @@ function update() {
     if (wdist(b.wx, b.wy, player.wx, player.wy) < 34) {
       b.got = true; bagsGot++; score += 15;
       player.boostT = 300;   // ~5 s na 60 fps
+      sfx('pickup', 0.6);
       boom(player.wx, player.wy, '#ffffff', 14);
       popup('💊 Párno! 200% rychlost xd');
       updateHud();
@@ -791,6 +845,17 @@ function drawFries() {
   }
 }
 
+function drawMuteBtn() {
+  const r = 16, x = VW - r - 14, y = VH - r - 14;
+  muteBtn = { x, y, r };
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.font = '16px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(musicMuted ? '🔇' : '🔊', x, y+1);
+}
+
 function drawPopups() {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   let i = 0;
@@ -861,19 +926,26 @@ function drawMenu() {
   gtaText('GTA 7: TĚŠÍN CITY', VW/2, VH*0.10, titleSize, '#ffd23f', '#000', 8);
   gtaText('Smažák s Hranolkama DLC', VW/2, VH*0.10 + titleSize*0.95, titleSize*0.5, '#ffffff', '#000', 5);
 
-  // --- Tlačítko NOVÁ KRA ---
+  // --- Tlačítko NOVÁ HRA (klikací) ---
   const bw = Math.min(VW*0.7, 300), bh = 64;
-  const bx = (VW-bw)/2, by = VH*0.74;
+  const bcx = VW/2, bcy = VH*0.74 + bh/2;
   const pulse = 0.5 + 0.5*Math.sin(Date.now()/400);
+  const breathe = 1 + Math.sin(Date.now()/450)*0.025;       // jemné „dýchání"
+  const press = pendingStart ? 1 - 0.10*(menuPress/10) : 1;  // zmáčknutí dovnitř
+  const sc = breathe * press;
+  ctx.save();
+  ctx.translate(bcx, bcy); ctx.scale(sc, sc); ctx.translate(-bcx, -bcy);
+  const bx = bcx - bw/2, by = bcy - bh/2;
   ctx.save();
   ctx.shadowColor = `rgba(255,210,63,${0.4+pulse*0.4})`;
   ctx.shadowBlur = 18 + pulse*14;
-  ctx.fillStyle = '#1c1c12';
+  ctx.fillStyle = pendingStart ? '#ffd23f' : '#1c1c12';     // při zmáčknutí se rozsvítí
   ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 14); ctx.fill();
   ctx.restore();
   ctx.lineWidth = 3; ctx.strokeStyle = '#ffd23f';
   ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 14); ctx.stroke();
-  gtaText('▶  NOVÁ HRA', VW/2, by + bh/2 + 1, 30, '#ffd23f', '#000', 5);
+  gtaText('▶  NOVÁ HRA', bcx, bcy + 1, 30, pendingStart ? '#1c1c12' : '#ffd23f', '#000', pendingStart ? 2 : 5);
+  ctx.restore();
   menuBtn = { x: bx, y: by, w: bw, h: bh };
 
   // --- Disclaimer dole ---
@@ -934,12 +1006,15 @@ function drawGameOver() {
 
 // ---------- Smyčka ----------
 function loop() {
+  // klikací efekt menu → po doznění spusť hru
+  if (pendingStart) { if (menuPress > 0) menuPress--; else { pendingStart = false; startGame(); } }
   if (hitstop > 0) hitstop--; else update();   // hitstop = mikro-zmrazení
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, VW, VH);
 
   if (state === 'MENU') {
     drawMenu();
+    drawMuteBtn();
   } else {
     // screen shake: posuň svět (ne UI) podle trauma²
     const s = trauma * trauma * 16;
@@ -962,6 +1037,7 @@ function loop() {
     drawBanner();
     drawBossHpBar();
     drawSmazakBtn();
+    drawMuteBtn();
     drawJoystick();
     if (state === 'OVER') drawGameOver();
   }
