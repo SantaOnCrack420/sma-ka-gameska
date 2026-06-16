@@ -1075,3 +1075,7 @@ function loop() {
 buildMap();
 showHud(false);
 loop();
+
+// pokus spustit hudbu hned při načtení (pokud prohlížeč povolí autoplay);
+// jinak naskočí při prvním dotyku přes listenery výše
+startMusic();
