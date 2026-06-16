@@ -10,7 +10,8 @@ const ctx = canvas.getContext('2d');
 // VW/VH = logické rozměry (CSS px). Backing store škálujeme podle DPR = ostrá retina grafika.
 let VW = window.innerWidth, VH = window.innerHeight;
 function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  // strop DPR 2: na retina (DPR 3) by se kreslilo ~2× víc pixelů zbytečně = sekání
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   VW = window.innerWidth;
   VH = window.innerHeight;
   canvas.style.width = VW + 'px';
@@ -48,14 +49,18 @@ function setMusicVol() {
   window.addEventListener(ev, startMusic));
 
 // ---------- Zvukové efekty (8-bit, vyměnitelné v assets/sfx/) ----------
+// Pool pevných elementů na každý zvuk — žádné plození nových (iOS jinak seká).
 const SFX = {};
 ['click','shoot','hit','kill','pickup','hurt','boom','boss','wave','gameover'].forEach(n => {
-  const a = new Audio('assets/sfx/' + n + '.wav'); a.preload = 'auto'; SFX[n] = a;
+  const pool = [];
+  for (let i = 0; i < 4; i++) { const a = new Audio('assets/sfx/' + n + '.wav'); a.preload = 'auto'; pool.push(a); }
+  SFX[n] = { pool, idx: 0 };
 });
 function sfx(name, vol = 1) {
   if (musicMuted) return;
-  const base = SFX[name]; if (!base) return;
-  const a = base.cloneNode();
+  const e = SFX[name]; if (!e) return;
+  const a = e.pool[e.idx]; e.idx = (e.idx + 1) % e.pool.length;
+  try { a.currentTime = 0; } catch (_) {}
   a.volume = vol;
   a.playbackRate = 0.92 + Math.random() * 0.16;   // náhodný pitch ±8 % (ať to není strojové)
   a.play().catch(() => {});
