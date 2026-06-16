@@ -7,9 +7,18 @@
 // ---------- Canvas ----------
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+// VW/VH = logické rozměry (CSS px). Backing store škálujeme podle DPR = ostrá retina grafika.
+let VW = window.innerWidth, VH = window.innerHeight;
 function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  VW = window.innerWidth;
+  VH = window.innerHeight;
+  canvas.style.width = VW + 'px';
+  canvas.style.height = VH + 'px';
+  canvas.width = Math.round(VW * dpr);
+  canvas.height = Math.round(VH * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // kreslíme v logických px, GPU dorenderuje ostře
+  ctx.imageSmoothingQuality = 'high';
 }
 window.addEventListener('resize', resize);
 resize();
@@ -90,7 +99,7 @@ function wts(wx, wy) {
   if (dx < -WPX/2) dx += WPX;
   if (dy >  WPY/2) dy -= WPY;
   if (dy < -WPY/2) dy += WPY;
-  return [canvas.width/2 + dx, canvas.height/2 + dy];
+  return [VW/2 + dx, VH/2 + dy];
 }
 function wdist(ax, ay, bx, by) {
   let dx = Math.abs(ax - bx), dy = Math.abs(ay - by);
@@ -264,7 +273,7 @@ const TCOL = {
 };
 
 function drawMap() {
-  const halfW = canvas.width/2, halfH = canvas.height/2;
+  const halfW = VW/2, halfH = VH/2;
   const startC = Math.floor((cam.x - halfW)/TILE) - 1;
   const endC   = Math.floor((cam.x + halfW)/TILE) + 1;
   const startR = Math.floor((cam.y - halfH)/TILE) - 1;
@@ -306,7 +315,7 @@ function drawMap() {
 }
 
 function drawPlayer() {
-  const cx = canvas.width/2, cy = canvas.height/2;
+  const cx = VW/2, cy = VH/2;
   ctx.save();
   ctx.translate(cx, cy);
 
@@ -343,7 +352,7 @@ function drawPlayer() {
 function drawPigeons() {
   for (const p of pigeons) {
     const [x, y] = wts(p.wx, p.wy);
-    if (x < -40 || x > canvas.width+40 || y < -40 || y > canvas.height+40) continue;
+    if (x < -40 || x > VW+40 || y < -40 || y > VH+40) continue;
     const bob = Math.sin(p.t*3)*2;
     ctx.fillStyle = '#9aa0a8';
     ctx.beginPath(); ctx.ellipse(x, y+bob, 11, 8, 0, 0, Math.PI*2); ctx.fill();
@@ -395,35 +404,35 @@ function gtaText(text, x, y, size, fill = '#ffd700', stroke = '#000', sw = 6) {
 
 function drawMenu() {
   ctx.fillStyle = '#10101c';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, VW, VH);
   if (menuReady) {
     // CONTAIN — ukáže celý plakát, černé pruhy nahoře/dole
     const ir = menuBg.width / menuBg.height;
-    const cr = canvas.width / canvas.height;
+    const cr = VW / VH;
     let w, h, x, y;
-    if (cr > ir) { h = canvas.height; w = h*ir; x = (canvas.width-w)/2; y = 0; }
-    else { w = canvas.width; h = w/ir; x = 0; y = (canvas.height-h)/2; }
+    if (cr > ir) { h = VH; w = h*ir; x = (VW-w)/2; y = 0; }
+    else { w = VW; h = w/ir; x = 0; y = (VH-h)/2; }
     ctx.drawImage(menuBg, x, y, w, h);
   }
   const a = 0.5 + 0.5*Math.sin(Date.now()/300);
   ctx.globalAlpha = a;
-  gtaText('TAPNI PRO START', canvas.width/2, canvas.height - 50, 26, '#fff', '#000', 5);
+  gtaText('TAPNI PRO START', VW/2, VH - 50, 26, '#fff', '#000', 5);
   ctx.globalAlpha = 1;
 }
 
 function drawGameOver() {
   ctx.fillStyle = 'rgba(0,0,0,0.75)';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  gtaText('KONEC KRY', canvas.width/2, canvas.height/2 - 40, 52, '#ff3b3b', '#000', 7);
-  gtaText(`SKÓRE: ${score}`, canvas.width/2, canvas.height/2 + 20, 34, '#ffd700');
-  gtaText('TAPNI PRO NOVOU KRU', canvas.width/2, canvas.height/2 + 80, 22, '#fff');
+  ctx.fillRect(0, 0, VW, VH);
+  gtaText('KONEC KRY', VW/2, VH/2 - 40, 52, '#ff3b3b', '#000', 7);
+  gtaText(`SKÓRE: ${score}`, VW/2, VH/2 + 20, 34, '#ffd700');
+  gtaText('TAPNI PRO NOVOU KRU', VW/2, VH/2 + 80, 22, '#fff');
 }
 
 // ---------- Smyčka ----------
 function loop() {
   update();
   ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, VW, VH);
 
   if (state === 'MENU') {
     drawMenu();
