@@ -317,11 +317,11 @@ function toggleMute() { muted = !muted; if (!muted) startMusic(); setMusicVol();
 // menu tlačítko: klikací efekt
 let menuPress = 0, pendingStart = false;
 function tryFullscreen() {
+  // jen schová lištu na Androidu/PC; orientaci NEvynucujeme (hraje na výšku i na šířku)
   const el = document.documentElement;
   try {
     if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-    if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
   } catch (_) {}
 }
 function startOrClick() {

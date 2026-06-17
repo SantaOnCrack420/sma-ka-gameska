@@ -219,6 +219,4 @@ body {
   line-height: 1.6;
   text-align: center;
 }
-@media (orientation: portrait) and (max-width: 900px) {
-  #rotate { display: flex; }
-}
+/* responzivní: hra funguje na výšku i na šířku, nic se nevynucuje */
