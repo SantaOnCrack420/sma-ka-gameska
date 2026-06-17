@@ -316,8 +316,17 @@ function toggleMute() { muted = !muted; if (!muted) startMusic(); setMusicVol();
 
 // menu tlačítko: klikací efekt
 let menuPress = 0, pendingStart = false;
+function tryFullscreen() {
+  const el = document.documentElement;
+  try {
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+  } catch (_) {}
+}
 function startOrClick() {
   if (!nick) { showNick(); return; }
+  tryFullscreen();   // Android/PC celá obrazovka; iOS to ignoruje (tam PWA)
   if (state === 'MENU') { if (!pendingStart) { menuPress = 10; pendingStart = true; sfx('click'); } }
   else startGame();
 }
@@ -1001,38 +1010,46 @@ function menuCard(x, y, w, h, label, primary, pressed) {
 function drawMenu() {
   ctx.fillStyle = '#10101c';
   ctx.fillRect(0, 0, VW, VH);
+  const land = VW > VH;
+  const ir = menuReady ? menuBg.width / menuBg.height : 0.557;
 
-  // Pozadí: COVER (vyplní celou obrazovku, portrait obrázek sedne přesně)
-  if (menuReady) {
-    const ir = menuBg.width / menuBg.height;
-    const cr = VW / VH;
-    let w, h, x, y;
-    if (cr > ir) { w = VW; h = w/ir; x = 0; y = (VH-h)/2; }
-    else { h = VH; w = h*ir; x = (VW-w)/2; y = 0; }
-    ctx.drawImage(menuBg, x, y, w, h);
+  let cx, cw;   // střed a šířka panelu s ovládáním
+  if (land) {
+    // poster vpravo (celá výška), ovládání vlevo
+    const iw = VH * ir, ix = VW - iw;
+    if (menuReady) ctx.drawImage(menuBg, ix, 0, iw, VH);
+    const g = ctx.createLinearGradient(ix - 30, 0, ix + 90, 0);
+    g.addColorStop(0, '#10101c'); g.addColorStop(1, 'rgba(16,16,28,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, ix + 90, VH);
+    cx = Math.max(ix, 120) / 2;
+    cw = Math.min(ix * 0.82, 320);
+  } else {
+    // portrait: poster přes celou plochu (cover)
+    if (menuReady) {
+      const cr = VW / VH; let w, h, x, y;
+      if (cr > ir) { w = VW; h = w/ir; x = 0; y = (VH-h)/2; }
+      else { h = VH; w = h*ir; x = (VW-w)/2; y = 0; }
+      ctx.drawImage(menuBg, x, y, w, h);
+    }
+    let gTop = ctx.createLinearGradient(0, 0, 0, VH*0.32);
+    gTop.addColorStop(0, 'rgba(0,0,0,0.78)'); gTop.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gTop; ctx.fillRect(0, 0, VW, VH*0.32);
+    let gBot = ctx.createLinearGradient(0, VH*0.55, 0, VH);
+    gBot.addColorStop(0, 'rgba(0,0,0,0)'); gBot.addColorStop(1, 'rgba(0,0,0,0.85)');
+    ctx.fillStyle = gBot; ctx.fillRect(0, VH*0.55, VW, VH*0.45);
+    cx = VW/2; cw = Math.min(VW*0.84, 360);
   }
 
-  // Tmavé přechody nahoře a dole pro čitelnost textu
-  let gTop = ctx.createLinearGradient(0, 0, 0, VH*0.32);
-  gTop.addColorStop(0, 'rgba(0,0,0,0.78)'); gTop.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = gTop; ctx.fillRect(0, 0, VW, VH*0.32);
-  let gBot = ctx.createLinearGradient(0, VH*0.55, 0, VH);
-  gBot.addColorStop(0, 'rgba(0,0,0,0)'); gBot.addColorStop(1, 'rgba(0,0,0,0.85)');
-  ctx.fillStyle = gBot; ctx.fillRect(0, VH*0.55, VW, VH*0.45);
+  // --- Název hry ---
+  const titleSize = land ? Math.min(VH*0.11, cw*0.13, 32) : Math.min(VW*0.115, 56);
+  const titleY = land ? VH*0.17 : VH*0.10;
+  gtaText('GTA 7: TĚŠÍN CITY', cx, titleY, titleSize, '#ffd23f', '#000', land?5:8);
+  gtaText('Smažák s Hranolkama DLC', cx, titleY + titleSize*0.95, titleSize*0.5, '#ffffff', '#000', 4);
 
-  const land = VW > VH;   // na šířku = jiné rozložení
-
-  // --- Název hry (GTA styl) ---
-  const titleSize = land ? Math.min(VH*0.10, 34) : Math.min(VW*0.115, 56);
-  const titleY = land ? VH*0.14 : VH*0.10;
-  gtaText('GTA 7: TĚŠÍN CITY', VW/2, titleY, titleSize, '#ffd23f', '#000', land?6:8);
-  gtaText('Smažák s Hranolkama DLC', VW/2, titleY + titleSize*0.95, titleSize*0.5, '#ffffff', '#000', 5);
-
-  // --- 3 karty: NOVÁ HRA / TOP SMAŽKY / NASTAVENÍ ---
-  const cw = Math.min(land ? VW*0.5 : VW*0.84, 360);
-  const ch = land ? 46 : 62, gap = land ? 11 : 16;
-  const x0 = VW/2 - cw/2;
-  let cy = land ? VH*0.36 : VH*0.54;
+  // --- 3 karty ---
+  const ch = land ? 46 : 62, gap = land ? 12 : 16;
+  const x0 = cx - cw/2;
+  let cy = land ? VH*0.40 : VH*0.54;
   menuBtn  = menuCard(x0, cy,                cw, ch+6, '▶  NOVÁ HRA',  true,  pendingStart);
   lbBtn    = menuCard(x0, cy + ch+gap,       cw, ch,   '🏆 TOP SMAŽKY', false, false);
   settingsBtn = menuCard(x0, cy + 2*(ch+gap), cw, ch,  '⚙️ NASTAVENÍ', false, false);
@@ -1045,14 +1062,13 @@ function drawMenu() {
   ctx.strokeText(ntxt, 14, 26); ctx.fillStyle = '#fff'; ctx.fillText(ntxt, 14, 26);
   nickMenuBtn = { x: 10, y: 12, w: ctx.measureText(ntxt).width + 12, h: 28 };
 
-  // --- Disclaimer dole ---
-  ctx.font = `600 ${Math.min(VW*0.032,13)}px Oswald, sans-serif`;
+  // --- Disclaimer dole (v panelu s ovládáním) ---
+  ctx.font = `600 ${Math.min(cw*0.04, 12)}px Oswald, sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(255,255,255,0.65)';
-  ctx.fillText('Všechny události, postavy a místa jsou fiktivní.', VW/2, VH - 42);
-  ctx.fillText('Jakákoliv podobnost se skutečnými osobami je čistě náhodná. xd', VW/2, VH - 24);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.fillText('Postavy a místa jsou fiktivní, podobnost čistě náhodná. xd', cx, VH - 22);
   ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.fillText('Mapa © OpenStreetMap contributors', VW/2, VH - 10);
+  ctx.fillText('Mapa © OpenStreetMap contributors', cx, VH - 9);
 }
 
 function wrapText(text, maxW, font) {
