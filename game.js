@@ -248,11 +248,9 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { keys[e.key] = false; });
 
 const inRect = (x, y, r) => r && x >= r.x && x <= r.x+r.w && y >= r.y && y <= r.y+r.h;
-// twin-stick: levá půlka = pohyb, pravá = míření + střelba
+// pohyb = levý joystick; střelba = tlačítko HOĎ (drž, auto-aim); smažák = tlačítko
 const moveJoy = { active: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 };
-const aimJoy  = { active: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 };
 let aimAngle = 0;
-let mouseAim = null;   // míření myší na PC {x,y}
 
 function menuButtonsHit(x, y) {
   if (nickMenuBtn && inRect(x, y, nickMenuBtn)) { showNick(); return true; }
@@ -265,21 +263,19 @@ function touchStart(x, y, id) {
   if (state === 'MENU') { if (!menuButtonsHit(x, y)) startOrClick(); return; }
   if (state !== 'PLAYING') { startOrClick(); return; }
   if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 8) { throwSmazak(); return; }
-  if (x < VW/2) { if (!moveJoy.active) { moveJoy.active = true; moveJoy.id = id; moveJoy.bx = x; moveJoy.by = y; moveJoy.dx = 0; moveJoy.dy = 0; } }
-  else          { if (!aimJoy.active)  { aimJoy.active  = true; aimJoy.id  = id; aimJoy.bx  = x; aimJoy.by  = y; aimJoy.dx  = 0; aimJoy.dy  = 0; } }
+  if (fryBtn && Math.hypot(x - fryBtn.x, y - fryBtn.y) < fryBtn.r + 10) { firing = true; fireTouch = id; shootCd = 0; return; }
+  if (!moveJoy.active) { moveJoy.active = true; moveJoy.id = id; moveJoy.bx = x; moveJoy.by = y; moveJoy.dx = 0; moveJoy.dy = 0; }
 }
 function touchMove(x, y, id) {
-  for (const j of [moveJoy, aimJoy]) {
-    if (j.active && j.id === id) {
-      let dx = x - j.bx, dy = y - j.by; const max = 55, l = Math.hypot(dx, dy);
-      if (l > max) { dx = dx/l*max; dy = dy/l*max; }
-      j.dx = dx; j.dy = dy;
-    }
+  if (moveJoy.active && moveJoy.id === id) {
+    let dx = x - moveJoy.bx, dy = y - moveJoy.by; const max = 55, l = Math.hypot(dx, dy);
+    if (l > max) { dx = dx/l*max; dy = dy/l*max; }
+    moveJoy.dx = dx; moveJoy.dy = dy;
   }
 }
 function touchEnd(id) {
   if (moveJoy.id === id) { moveJoy.active = false; moveJoy.id = -1; moveJoy.dx = 0; moveJoy.dy = 0; }
-  if (aimJoy.id  === id) { aimJoy.active  = false; aimJoy.id  = -1; aimJoy.dx  = 0; aimJoy.dy  = 0; }
+  if (fireTouch === id) { firing = false; fireTouch = -1; }
 }
 canvas.addEventListener('touchstart', e => { e.preventDefault(); for (const t of e.changedTouches) touchStart(t.clientX, t.clientY, t.identifier); }, {passive:false});
 canvas.addEventListener('touchmove',  e => { e.preventDefault(); for (const t of e.changedTouches) touchMove(t.clientX, t.clientY, t.identifier); }, {passive:false});
@@ -290,10 +286,9 @@ canvas.addEventListener('mousedown', e => {
   if (state === 'MENU') { if (!menuButtonsHit(x, y)) startOrClick(); return; }
   if (state !== 'PLAYING') { startOrClick(); return; }
   if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 8) { throwSmazak(); return; }
-  mouseAim = { x, y };   // PC: drž myš = miř a střílej
+  firing = true;   // PC: drž myš = střílej (auto-aim)
 });
-canvas.addEventListener('mousemove', e => { if (mouseAim) mouseAim = { x: e.clientX, y: e.clientY }; });
-window.addEventListener('mouseup', () => { mouseAim = null; });
+window.addEventListener('mouseup', () => { firing = false; });
 
 // ---------- Herní stav ----------
 
@@ -448,20 +443,21 @@ function spawnBag() {
 // ---------- Hranolky ----------
 function shoot() {
   if (shootCd > 0) return;
-  let ang = aimAngle;
-  // jemný aim-assist: když je nepřítel blízko směru míření, uchyl se k němu
+  // auto-aim na nejbližšího nepřítele (cigán/boss/pes), jinak holub, jinak kam koukáš
   let best = null, bd = 1e9;
   const enemies = cogani.slice();
   if (boss) enemies.push(boss);
   if (dog) enemies.push(dog);
   for (const c of enemies) {
-    const dx = c.wx - player.wx, dy = c.wy - player.wy, d = Math.hypot(dx, dy);
-    if (d > 360) continue;
-    let da = Math.atan2(dy, dx) - ang;
-    while (da > Math.PI) da -= 2*Math.PI; while (da < -Math.PI) da += 2*Math.PI;
-    if (Math.abs(da) < 0.4 && d < bd) { bd = d; best = Math.atan2(dy, dx); }
+    const d = wdist(player.wx, player.wy, c.wx, c.wy);
+    if (d < bd) { bd = d; best = c; }
   }
-  if (best !== null) ang = best;
+  if (!best) for (const p of pigeons) {
+    const d = wdist(player.wx, player.wy, p.wx, p.wy);
+    if (d < bd) { bd = d; best = p; }
+  }
+  let ang = facing > 0 ? 0 : Math.PI;
+  if (best) ang = Math.atan2(best.wy - player.wy, best.wx - player.wx);
   const sp = 6;
   const angles = perkTriple ? [ang - 0.22, ang, ang + 0.22] : [ang];
   for (const a of angles)
@@ -535,17 +531,9 @@ function update() {
 
   updateCam();
 
-  // --- míření + střelba (pravý joystick / myš) ---
-  firing = false;
-  if (aimJoy.active && (aimJoy.dx || aimJoy.dy)) {
-    aimAngle = Math.atan2(aimJoy.dy, aimJoy.dx); firing = true;
-    if (aimJoy.dx > 0.15) facing = 1; else if (aimJoy.dx < -0.15) facing = -1;
-  } else if (mouseAim) {
-    aimAngle = Math.atan2(mouseAim.y - VH/2, mouseAim.x - VW/2); firing = true;
-    if (Math.cos(aimAngle) > 0.15) facing = 1; else if (Math.cos(aimAngle) < -0.15) facing = -1;
-  }
+  // --- střelba: drž HOĎ tlačítko / myš / mezerník (auto-aim) ---
   if (shootCd > 0) shootCd--;
-  if (firing && shootCd === 0) shoot();
+  if ((firing || keys[' ']) && shootCd === 0) shoot();
 
   for (const f of fries) {
     f.wx += f.vx; f.wy += f.vy; f.life--;
@@ -884,7 +872,7 @@ function drawBanner() {
 }
 
 function drawFryBtn() {
-  const r = 46, x = VW - r - 20, y = VH - r - 120;
+  const r = 42, x = VW - r - 24, y = VH - r - 24;   // pravý dolní roh
   fryBtn = { x, y, r };
   ctx.globalAlpha = firing ? 1 : 0.9;
   ctx.fillStyle = firing ? '#ffd23f' : '#c0392b';
@@ -898,7 +886,7 @@ function drawFryBtn() {
 }
 
 function drawSmazakBtn() {
-  const r = 34, x = VW - r - 36, y = VH - 290;
+  const r = 32, x = VW - r - 30, y = VH - 2*42 - r - 40;   // nad tlačítkem HOĎ
   smazakBtn = { x, y, r };
   const ready = smazakCd <= 0;
   ctx.globalAlpha = ready ? 0.9 : 0.4;
@@ -973,8 +961,7 @@ function drawStick(j, col) {
   ctx.globalAlpha = 1;
 }
 function drawJoystick() {
-  drawStick(moveJoy, '#ffffff');   // pohyb
-  drawStick(aimJoy, '#ff5a4d');    // míření/střelba
+  drawStick(moveJoy, '#ffffff');   // pohyb (levý palec)
 }
 
 function gtaText(text, x, y, size, fill = '#ffd700', stroke = '#000', sw = 6) {
@@ -1169,6 +1156,7 @@ function loop() {
     drawPopups();
     drawBanner();
     drawBossHpBar();
+    drawFryBtn();
     drawSmazakBtn();
     drawMuteBtn();
     drawJoystick();
