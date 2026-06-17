@@ -28,7 +28,7 @@
       <button id="nickBtn">▶ POKRAČOVAT</button>
     </div>
   </div>
-  <div id="settings">
+  <div id="settings" class="overlay">
     <div class="sbox">
       <h2>⚙️ NASTAVENÍ</h2>
       <div class="srow">
@@ -39,9 +39,14 @@
         <label><input type="checkbox" id="sfxOnCb"> Zvuky</label>
         <input type="range" id="sfxVolSl" min="0" max="100">
       </div>
-      <h3>🏆 TOP SMAŽKY</h3>
-      <ol id="lbList"></ol>
       <button id="settingsClose">ZAVŘÍT</button>
+    </div>
+  </div>
+  <div id="leaderboard" class="overlay">
+    <div class="sbox">
+      <h2>🏆 TOP SMAŽKY</h2>
+      <ol id="lbList"></ol>
+      <button id="lbClose">ZAVŘÍT</button>
     </div>
   </div>
   <script src="assets/mapdata.js"></script>

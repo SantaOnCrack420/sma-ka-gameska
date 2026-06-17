@@ -127,7 +127,7 @@ function refreshLB() {                  // stáhni globální žebříček do ca
       arr.sort((a, b) => b.score - a.score);
       lbCache = arr.slice(0, 50);
       localStorage.setItem('smazak_lb', JSON.stringify(lbCache.slice(0, 20)));  // offline záloha
-      if (settingsEl && settingsEl.style.display === 'flex') renderLbList();
+      if (leaderboardEl && leaderboardEl.style.display === 'flex') renderLbList();
     })
     .catch(() => {});
 }
@@ -148,12 +148,14 @@ function submitScore(name, sc) {
 
 // ---------- Nastavení (overlay) ----------
 const settingsEl    = document.getElementById('settings');
+const leaderboardEl = document.getElementById('leaderboard');
 const musicOnCb     = document.getElementById('musicOnCb');
 const sfxOnCb       = document.getElementById('sfxOnCb');
 const musicVolSl    = document.getElementById('musicVolSl');
 const sfxVolSl      = document.getElementById('sfxVolSl');
 const lbListEl      = document.getElementById('lbList');
 const settingsClose = document.getElementById('settingsClose');
+const lbClose       = document.getElementById('lbClose');
 let settingsBtn = null, lbBtn = null;   // karty v menu (canvas)
 function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
 function renderLbList() {
@@ -162,20 +164,23 @@ function renderLbList() {
     ? lb.map(e => `<li>${escapeHtml(e.name)} — ${e.score}</li>`).join('')
     : '<li class="empty">Zatím nikdo. Buď první! 🍟</li>';
 }
-function openSettings() {
+function openSettings() {            // jen zvuky
   musicOnCb.checked = musicOn; sfxOnCb.checked = sfxOn;
   musicVolSl.value = Math.round(musicVol * 100);
   sfxVolSl.value = Math.round(sfxVol * 100);
-  renderLbList(); refreshLB();
   settingsEl.style.display = 'flex';
 }
-function closeSettings() { settingsEl.style.display = 'none'; }
+function openLeaderboard() {         // jen skóre
+  renderLbList(); refreshLB();
+  leaderboardEl.style.display = 'flex';
+}
 musicOnCb.addEventListener('change', () => { musicOn = musicOnCb.checked; if (musicOn) startMusic(); setMusicVol(); saveAudioPrefs(); });
 sfxOnCb.addEventListener('change',   () => { sfxOn = sfxOnCb.checked; saveAudioPrefs(); if (sfxOn) sfx('click'); });
 musicVolSl.addEventListener('input', () => { musicVol = musicVolSl.value / 100; setMusicVol(); saveAudioPrefs(); });
 sfxVolSl.addEventListener('input',   () => { sfxVol = sfxVolSl.value / 100; saveAudioPrefs(); });
 sfxVolSl.addEventListener('change',  () => sfx('click'));
-settingsClose.addEventListener('click', closeSettings);
+settingsClose.addEventListener('click', () => { settingsEl.style.display = 'none'; });
+lbClose.addEventListener('click', () => { leaderboardEl.style.display = 'none'; });
 
 // ---------- HUD ----------
 const ui = document.getElementById('ui');
@@ -253,7 +258,7 @@ let aimAngle = 0;
 
 function menuButtonsHit(x, y) {
   if (nickMenuBtn && inRect(x, y, nickMenuBtn)) { showNick(); return true; }
-  if (lbBtn && inRect(x, y, lbBtn)) { openSettings(); return true; }
+  if (lbBtn && inRect(x, y, lbBtn)) { openLeaderboard(); return true; }
   if (settingsBtn && inRect(x, y, settingsBtn)) { openSettings(); return true; }
   return false;
 }

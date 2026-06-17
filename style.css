@@ -136,7 +136,7 @@ body {
 }
 #nickBtn:active { transform: scale(0.97); }
 
-#settings {
+#settings, #leaderboard {
   position: fixed;
   inset: 0;
   background: rgba(8, 8, 16, 0.92);
@@ -188,7 +188,7 @@ body {
 }
 #lbList li::marker { color: #ffd23f; font-weight: bold; }
 #lbList .empty { list-style: none; margin-left: -22px; color: #888; text-align: center; }
-#settingsClose {
+#settingsClose, #lbClose {
   width: 100%;
   margin-top: 14px;
   font-family: 'Oswald', Impact, sans-serif;
@@ -200,7 +200,7 @@ body {
   background: transparent;
   color: #ffd23f;
 }
-#settingsClose:active { transform: scale(0.97); }
+#settingsClose:active, #lbClose:active { transform: scale(0.97); }
 
 /* výzva na šířku — viditelná jen když je telefon na výšku */
 #rotate {
