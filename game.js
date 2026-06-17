@@ -743,6 +743,37 @@ function drawMap() {
   }
 }
 
+// ---------- Reálné podniky (POI z OSM) ----------
+const pois = (typeof POI !== 'undefined') ? POI.map(p => ({ role: p[0], wx: p[1], wy: p[2], name: p[3] })) : [];
+const POI_ICON = {
+  VECERKA:'🏪', KAUFLAND:'🛒', ALKOHOL:'🍾', STANEK:'🍫', TRAFIKA:'🚬',
+  FASTFOOD:'🌯', HOSPODA:'🍺', BAR:'🍸', ZASTAVARNA:'💰', LEKARNA:'💊',
+  BANKA:'🏧', PEKARNA:'🥖', RESTAURACE:'🍽️', REZNIK:'🥩', TRZNICE:'🛍️', PUMPA:'⛽',
+};
+function drawPOI() {
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const p of pois) {
+    const [sx, sy] = wts(p.wx, p.wy);
+    if (sx < -30 || sx > VW+30 || sy < -30 || sy > VH+30) continue;
+    const near = wdist(player.wx, player.wy, p.wx, p.wy) < 50;
+    // podklad pod ikonu
+    ctx.globalAlpha = near ? 1 : 0.85;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.beginPath(); ctx.arc(sx, sy - 14, 12, 0, Math.PI*2); ctx.fill();
+    ctx.font = '16px serif';
+    ctx.fillText(POI_ICON[p.role] || '📍', sx, sy - 14);
+    ctx.globalAlpha = 1;
+    if (near) {   // poblíž = ukaž jméno + výzva
+      const lbl = (p.name || p.role);
+      ctx.font = 'bold 13px Oswald, sans-serif';
+      const w = ctx.measureText(lbl).width + 14;
+      ctx.fillStyle = 'rgba(0,0,0,0.78)';
+      ctx.fillRect(sx - w/2, sy - 44, w, 19);
+      ctx.fillStyle = '#ffd23f'; ctx.fillText(lbl, sx, sy - 34);
+    }
+  }
+}
+
 function drawPlayer() {
   const cx = VW/2, cy = VH/2;
   ctx.save();
@@ -1194,6 +1225,7 @@ function loop() {
     ctx.save();
     ctx.translate(shx, shy);
     drawMap();
+    drawPOI();
     drawParticles();
     drawBags();
     drawPigeons();

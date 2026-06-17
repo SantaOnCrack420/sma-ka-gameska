@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v37';
+const CACHE = 'smazak-v38';
 const FILES = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const FILES = [
   './game.js',
   './assets/mapdata.js',
   './assets/mapvec.js',
+  './assets/mappoi.js',
   './manifest.json',
   './assets/simmy_char.png',
   './assets/menu_bg.png',
