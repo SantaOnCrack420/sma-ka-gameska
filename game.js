@@ -30,7 +30,11 @@ const menuBg  = new Image(); menuBg.src  = 'assets/menu_bg.png';
 const mapImg  = new Image(); mapImg.src  = 'assets/map.png';
 let charReady = false; charImg.onload = () => charReady = true;
 let menuReady = false; menuBg.onload  = () => menuReady = true;
-let mapReady  = false; mapImg.onload  = () => mapReady  = true;
+let mapReady  = false, mapFailed = false;
+mapImg.onload  = () => mapReady = true;
+mapImg.onerror = () => mapFailed = true;
+// pojistka: kdyby se mapa nenačetla do 8 s (slabý mobil), hraj na zelené zemi místo zaseknutí
+setTimeout(() => { if (!mapReady) mapFailed = true; }, 8000);
 
 // ---------- Nastavení zvuku (perzistované) ----------
 let musicOn  = localStorage.getItem('smazak_musicOn') !== '0';
@@ -692,6 +696,7 @@ function update() {
 // ---------- Vykreslení ----------
 // vykresli JEN viditelné dlaždice (zvládne libovolně velkou mapu)
 function drawMap() {
+  if (mapFailed) { ctx.fillStyle = '#5f7d4a'; ctx.fillRect(0, 0, VW, VH); return; }  // pojistka: zelená zem
   ctx.fillStyle = '#10101c'; ctx.fillRect(0, 0, VW, VH);   // mimo mapu = tma
   if (!mapReady) {
     ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 22px Oswald, sans-serif';
@@ -699,12 +704,13 @@ function drawMap() {
     ctx.fillText('Načítám Těšín…', VW/2, VH/2);
     return;
   }
-  // vykresli jen viditelný výřez mapy, přiblížený na ZOOM
+  // viditelný výřez (zoom). Obrázek může být menší než logický svět → přepočet zdroje.
+  const ssx = mapImg.width / WPX, ssy = mapImg.height / WPY;
   const srcW = VW/ZOOM, srcH = VH/ZOOM;
   const sx = clamp(cam.x - srcW/2, 0, Math.max(0, WPX - srcW));
   const sy = clamp(cam.y - srcH/2, 0, Math.max(0, WPY - srcH));
   ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(mapImg, sx, sy, srcW, srcH, 0, 0, VW, VH);
+  ctx.drawImage(mapImg, sx*ssx, sy*ssy, srcW*ssx, srcH*ssy, 0, 0, VW, VH);
 }
 
 function drawPlayer() {
