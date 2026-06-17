@@ -187,7 +187,7 @@ function showHud(on) { if (ui) ui.style.display = on ? 'flex' : 'none'; }
 // ---------- Svět (reálný Český Těšín — obrázek + kolize z OSM) ----------
 const WPX = MAP_IMG_W, WPY = MAP_IMG_H;   // svět = pixely mapy
 const ZOOM = 2.1;                          // přiblížení (mapa je teď ve velkém měřítku 3,6 px/m)
-const COMBAT = false;                      // Fáze A = procházka; ve Fázi B zapnout boj
+const COMBAT = true;                       // Fáze B = boj zapnut
 const SPAWN_WX = SPAWN_PX[0];
 const SPAWN_WY = SPAWN_PX[1];
 
@@ -247,28 +247,39 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
 
-const joy = { active: false, id: -1, baseX: 0, baseY: 0, dx: 0, dy: 0 };
+const inRect = (x, y, r) => r && x >= r.x && x <= r.x+r.w && y >= r.y && y <= r.y+r.h;
+// twin-stick: levá půlka = pohyb, pravá = míření + střelba
+const moveJoy = { active: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 };
+const aimJoy  = { active: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 };
+let aimAngle = 0;
+let mouseAim = null;   // míření myší na PC {x,y}
+
+function menuButtonsHit(x, y) {
+  if (nickMenuBtn && inRect(x, y, nickMenuBtn)) { showNick(); return true; }
+  if (lbBtn && inRect(x, y, lbBtn)) { openSettings(); return true; }
+  if (settingsBtn && inRect(x, y, settingsBtn)) { openSettings(); return true; }
+  return false;
+}
 function touchStart(x, y, id) {
   if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
-  if (state === 'MENU' && nickMenuBtn && x >= nickMenuBtn.x && x <= nickMenuBtn.x+nickMenuBtn.w && y >= nickMenuBtn.y && y <= nickMenuBtn.y+nickMenuBtn.h) { showNick(); return; }
-  if (state === 'MENU' && lbBtn && x >= lbBtn.x && x <= lbBtn.x+lbBtn.w && y >= lbBtn.y && y <= lbBtn.y+lbBtn.h) { openSettings(); return; }
-  if (state === 'MENU' && settingsBtn && x >= settingsBtn.x && x <= settingsBtn.x+settingsBtn.w && y >= settingsBtn.y && y <= settingsBtn.y+settingsBtn.h) { openSettings(); return; }
+  if (state === 'MENU') { if (!menuButtonsHit(x, y)) startOrClick(); return; }
   if (state !== 'PLAYING') { startOrClick(); return; }
-  if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) { throwSmazak(); return; }
-  if (fryBtn && Math.hypot(x - fryBtn.x, y - fryBtn.y) < fryBtn.r + 8) { firing = true; fireTouch = id; shootCd = 0; return; }
-  joy.active = true; joy.id = id; joy.baseX = x; joy.baseY = y; joy.dx = 0; joy.dy = 0;
+  if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 8) { throwSmazak(); return; }
+  if (x < VW/2) { if (!moveJoy.active) { moveJoy.active = true; moveJoy.id = id; moveJoy.bx = x; moveJoy.by = y; moveJoy.dx = 0; moveJoy.dy = 0; } }
+  else          { if (!aimJoy.active)  { aimJoy.active  = true; aimJoy.id  = id; aimJoy.bx  = x; aimJoy.by  = y; aimJoy.dx  = 0; aimJoy.dy  = 0; } }
 }
 function touchMove(x, y, id) {
-  if (joy.active && joy.id === id) {
-    let dx = x - joy.baseX, dy = y - joy.baseY;
-    const max = 55, l = Math.hypot(dx, dy);
-    if (l > max) { dx = dx/l*max; dy = dy/l*max; }
-    joy.dx = dx; joy.dy = dy;
+  for (const j of [moveJoy, aimJoy]) {
+    if (j.active && j.id === id) {
+      let dx = x - j.bx, dy = y - j.by; const max = 55, l = Math.hypot(dx, dy);
+      if (l > max) { dx = dx/l*max; dy = dy/l*max; }
+      j.dx = dx; j.dy = dy;
+    }
   }
 }
 function touchEnd(id) {
-  if (joy.id === id) { joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0; }
-  if (fireTouch === id) { firing = false; fireTouch = -1; }
+  if (moveJoy.id === id) { moveJoy.active = false; moveJoy.id = -1; moveJoy.dx = 0; moveJoy.dy = 0; }
+  if (aimJoy.id  === id) { aimJoy.active  = false; aimJoy.id  = -1; aimJoy.dx  = 0; aimJoy.dy  = 0; }
 }
 canvas.addEventListener('touchstart', e => { e.preventDefault(); for (const t of e.changedTouches) touchStart(t.clientX, t.clientY, t.identifier); }, {passive:false});
 canvas.addEventListener('touchmove',  e => { e.preventDefault(); for (const t of e.changedTouches) touchMove(t.clientX, t.clientY, t.identifier); }, {passive:false});
@@ -276,15 +287,13 @@ canvas.addEventListener('touchend',   e => { e.preventDefault(); for (const t of
 canvas.addEventListener('mousedown', e => {
   const x = e.clientX, y = e.clientY;
   if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
-  if (state === 'MENU' && nickMenuBtn && x >= nickMenuBtn.x && x <= nickMenuBtn.x+nickMenuBtn.w && y >= nickMenuBtn.y && y <= nickMenuBtn.y+nickMenuBtn.h) { showNick(); return; }
-  if (state === 'MENU' && lbBtn && x >= lbBtn.x && x <= lbBtn.x+lbBtn.w && y >= lbBtn.y && y <= lbBtn.y+lbBtn.h) { openSettings(); return; }
-  if (state === 'MENU' && settingsBtn && x >= settingsBtn.x && x <= settingsBtn.x+settingsBtn.w && y >= settingsBtn.y && y <= settingsBtn.y+settingsBtn.h) { openSettings(); return; }
-  if (state === 'PLAYING') {
-    if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 6) { throwSmazak(); return; }
-    if (fryBtn && Math.hypot(x - fryBtn.x, y - fryBtn.y) < fryBtn.r + 8) { firing = true; shootCd = 0; }
-  } else startOrClick();
+  if (state === 'MENU') { if (!menuButtonsHit(x, y)) startOrClick(); return; }
+  if (state !== 'PLAYING') { startOrClick(); return; }
+  if (smazakBtn && Math.hypot(x - smazakBtn.x, y - smazakBtn.y) < smazakBtn.r + 8) { throwSmazak(); return; }
+  mouseAim = { x, y };   // PC: drž myš = miř a střílej
 });
-window.addEventListener('mouseup', () => { firing = false; });
+canvas.addEventListener('mousemove', e => { if (mouseAim) mouseAim = { x: e.clientX, y: e.clientY }; });
+window.addEventListener('mouseup', () => { mouseAim = null; });
 
 // ---------- Herní stav ----------
 
@@ -336,7 +345,7 @@ function startGame() {
   player.wx = SPAWN_WX; player.wy = SPAWN_WY;
   player.vx = 0; player.vy = 0; player.boostT = 0;
   updateCam();
-  // Fáze A = čistá procházka po reálném Těšíně (nepřátelé přijdou ve Fázi B)
+  if (COMBAT) { for (let i = 0; i < 5; i++) spawnBag(); }   // párno po městě; cigáni přijdou ve vlnách
   showHud(true);
   updateHud();
   setMusicVol();   // ztlum hudbu na 50 %
@@ -345,10 +354,14 @@ function banner(text, t) { bannerText = text; bannerT = t; }
 const DEATH_MSGS = [
   'Zabili tě cigáni, okradli tě o všechno párno a tvou mrtvolu hodili do Olzy.',
   'Prodali tě Vietnamcům jako maso na kung-pao za pár gramů trávy. Aspoň k něčemu jsi byl dobrej.',
-  'Peco tě sejmul mačetou a jeho pes tě dojedl. Konec smažáka.',
-  'Pobodali tě na Náměstí Míru. Teď ležíš pochcanej v kaluži krve a párno je fuč.',
-  'Skončil jsi v Olze tváří dolů. Holubi měli hody.',
+  'Peco tě sejmul mačetou a jeho pes tě snědl. Konec smažáka.',
+  'Pobodali tě. Teď ležíš pochcanej v kaluži krve a párno je fuč.',
+  'Pohozeného v křoví tě našli ožralí a nadržení bezdomovci… poslední chvíle sis „užil".',
 ];
+const rnd = a => a[(Math.random()*a.length)|0];
+const HIT_TAUNTS  = ['Rozmrdám ti xicht debile!', 'Neutíkej ty sračko!', 'Ukradnu ti všechno parno!', 'Postava jak rotoped more!'];
+const PARNO_LINES = ['Hurá, našel jsem futro!', 'Tyvole free fuňko jen tak!', 'Mňam, to si zas zacpu rypák!'];
+const WAVE_LINES  = ['Bacha, agresivní Morgoši na obzoru!', 'Ara, čmoudi útočí!', 'Temnota se blíží…', 'Schovejte všechno železo!'];
 let deathMsg = '';
 function gameOver() {
   state = 'OVER'; showHud(false);
@@ -375,7 +388,7 @@ function randWalkable(minDistFromPlayer) {
   return null;
 }
 function spawnPigeon() {
-  const p = randWalkable(280); if (p) pigeons.push({ wx: p.wx, wy: p.wy, t: Math.random()*100, hp: 1 });
+  const p = randWalkable(160); if (p) pigeons.push({ wx: p.wx, wy: p.wy, t: Math.random()*100, hp: 1 });
 }
 function spawnNpc() {
   const p = randWalkable(120);
@@ -385,7 +398,7 @@ function spawnCoganRing(hp = 2) {
   // spawn v prstenci kolem hráče (na pochozím místě)
   for (let tries = 0; tries < 12; tries++) {
     const ang = Math.random()*Math.PI*2;
-    const dist = 420 + Math.random()*240;
+    const dist = 220 + Math.random()*120;
     const wx = player.wx + Math.cos(ang)*dist;
     const wy = player.wy + Math.sin(ang)*dist;
     if (isSolidAt(wx, wy)) continue;
@@ -404,7 +417,7 @@ function startNextWave() {
   } else {
     const n = 3 + wave*2;
     for (let i = 0; i < n; i++) spawnCoganRing();
-    banner('VLNA ' + wave + ' — JDOU CIGÁNI! (' + n + ')', 120); sfx('wave', 0.6);
+    banner(rnd(WAVE_LINES) + '  (vlna ' + wave + ')', 120); sfx('wave', 0.6);
   }
   waveState = 'FIGHT';
 }
@@ -429,36 +442,31 @@ function onWaveCleared() {
   popup(bonus);
 }
 function spawnBag() {
-  const p = randWalkable(200); if (p) bags.push({ wx: p.wx, wy: p.wy, t: Math.random()*100 });
+  const p = randWalkable(120); if (p) bags.push({ wx: p.wx, wy: p.wy, t: Math.random()*100 });
 }
 
 // ---------- Hranolky ----------
 function shoot() {
   if (shootCd > 0) return;
+  let ang = aimAngle;
+  // jemný aim-assist: když je nepřítel blízko směru míření, uchyl se k němu
   let best = null, bd = 1e9;
-  // priorita: nepřátelé (cigáni + boss + pes) do 380 px
   const enemies = cogani.slice();
   if (boss) enemies.push(boss);
   if (dog) enemies.push(dog);
   for (const c of enemies) {
-    const d = wdist(player.wx, player.wy, c.wx, c.wy);
-    if (d < bd && d < 380) { bd = d; best = c; }
+    const dx = c.wx - player.wx, dy = c.wy - player.wy, d = Math.hypot(dx, dy);
+    if (d > 360) continue;
+    let da = Math.atan2(dy, dx) - ang;
+    while (da > Math.PI) da -= 2*Math.PI; while (da < -Math.PI) da += 2*Math.PI;
+    if (Math.abs(da) < 0.4 && d < bd) { bd = d; best = Math.atan2(dy, dx); }
   }
-  // až když není nepřítel v dosahu, miř na holuby
-  if (!best) for (const p of pigeons) {
-    const d = wdist(player.wx, player.wy, p.wx, p.wy);
-    if (d < bd) { bd = d; best = p; }
-  }
-  let ang = player.angle - Math.PI/2;
-  if (best) {
-    let dx = best.wx - player.wx, dy = best.wy - player.wy;
-    ang = Math.atan2(dy, dx);
-  }
-  const sp = 8;
+  if (best !== null) ang = best;
+  const sp = 6;
   const angles = perkTriple ? [ang - 0.22, ang, ang + 0.22] : [ang];
   for (const a of angles)
-    fries.push({ wx: player.wx, wy: player.wy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 70 });
-  shootCd = perkRapid ? 9 : 18;
+    fries.push({ wx: player.wx, wy: player.wy, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 80 });
+  shootCd = perkRapid ? 9 : 16;
   sfx('shoot', 0.22);
 }
 
@@ -484,7 +492,7 @@ function smazakBoom(wx, wy) {
   addShake(0.55); freeze(4); sfx('boom', 0.7);
   boom(wx, wy, '#e8a020', 26);
   boom(wx, wy, '#f4c430', 18);
-  const R = 95;
+  const R = 42;
   for (const c of cogani) if (c.hp > 0 && wdist(wx, wy, c.wx, c.wy) < R) { c.hp = 0; score += 25; coganKills++; }
   if (boss && wdist(wx, wy, boss.wx, boss.wy) < R) { boss.hp -= 8; boss.hit = 10; }
   if (dog && wdist(wx, wy, dog.wx, dog.wy) < R) { dog.hp -= 3; dog.hit = 10; }
@@ -502,8 +510,9 @@ function update() {
   if (trauma > 0) trauma *= 0.90;   // doznívání otřesu
   if (state !== 'PLAYING') return;
 
+  // --- pohyb (levý joystick / WASD) ---
   let mdx = 0, mdy = 0;
-  if (joy.active && (joy.dx || joy.dy)) { mdx = joy.dx; mdy = joy.dy; }
+  if (moveJoy.active && (moveJoy.dx || moveJoy.dy)) { mdx = moveJoy.dx; mdy = moveJoy.dy; }
   else {
     if (keys['ArrowLeft']  || keys['a'] || keys['A']) mdx -= 1;
     if (keys['ArrowRight'] || keys['d'] || keys['D']) mdx += 1;
@@ -516,7 +525,6 @@ function update() {
     const l = Math.hypot(mdx, mdy) || 1;
     player.vx = (mdx/l)*spd;
     player.vy = (mdy/l)*spd;
-    player.angle = Math.atan2(mdy, mdx) + Math.PI/2;
     if (mdx > 0.15) facing = 1; else if (mdx < -0.15) facing = -1;
   } else { player.vx *= 0.7; player.vy *= 0.7; }
 
@@ -527,9 +535,17 @@ function update() {
 
   updateCam();
 
+  // --- míření + střelba (pravý joystick / myš) ---
+  firing = false;
+  if (aimJoy.active && (aimJoy.dx || aimJoy.dy)) {
+    aimAngle = Math.atan2(aimJoy.dy, aimJoy.dx); firing = true;
+    if (aimJoy.dx > 0.15) facing = 1; else if (aimJoy.dx < -0.15) facing = -1;
+  } else if (mouseAim) {
+    aimAngle = Math.atan2(mouseAim.y - VH/2, mouseAim.x - VW/2); firing = true;
+    if (Math.cos(aimAngle) > 0.15) facing = 1; else if (Math.cos(aimAngle) < -0.15) facing = -1;
+  }
   if (shootCd > 0) shootCd--;
-  // manuální střelba: drž tlačítko hranolky / mezerník
-  if ((firing || keys[' ']) && shootCd === 0) shoot();
+  if (firing && shootCd === 0) shoot();
 
   for (const f of fries) {
     f.wx += f.vx; f.wy += f.vy; f.life--;
@@ -571,11 +587,11 @@ function update() {
   for (const c of cogani) {
     c.t += 0.05;
     if (c.hit > 0) c.hit--;
-    const d = chase(c, 1.5);
-    if (d < 28 && hurtCd === 0) {
+    const d = chase(c, 0.8);
+    if (d < 12 && hurtCd === 0) {
       lives--; hurtCd = 90; updateHud(); addShake(0.45); sfx('hurt', 0.6);
       boom(player.wx, player.wy, '#ff3b3b', 12);
-      popup('🤕 Cigán tě dostal!');
+      popup('🤬 ' + rnd(HIT_TAUNTS));
       if (lives <= 0) { gameOver(); return; }
     }
   }
@@ -583,7 +599,7 @@ function update() {
   for (const f of fries) {
     if (f.life <= 0) continue;
     for (const c of cogani) {
-      if (c.hp > 0 && wdist(f.wx, f.wy, c.wx, c.wy) < 24) {
+      if (c.hp > 0 && wdist(f.wx, f.wy, c.wx, c.wy) < 12) {
         c.hp--; c.hit = 10; f.life = 0;
         boom(c.wx, c.wy, '#e8a020', 8); sfx('hit', 0.4);
         if (c.hp <= 0) { score += 25; coganKills++; updateHud(); boom(c.wx, c.wy, '#ff3b3b', 14); addShake(0.22); sfx('kill', 0.5); }
@@ -595,15 +611,15 @@ function update() {
   // --- BOSS Peco + pes ---
   if (boss) {
     boss.t += 0.05; if (boss.hit > 0) boss.hit--;
-    const d = chase(boss, 1.1);
-    if (d < 46 && hurtCd === 0) {
+    const d = chase(boss, 0.7);
+    if (d < 20 && hurtCd === 0) {
       lives--; hurtCd = 90; updateHud(); addShake(0.45); sfx('hurt', 0.6);
       boom(player.wx, player.wy, '#ff3b3b', 16);
       popup('🔪 Peco tě seknul mačetou!');
       if (lives <= 0) { gameOver(); return; }
     }
     for (const f of fries) {
-      if (f.life > 0 && wdist(f.wx, f.wy, boss.wx, boss.wy) < 42) {
+      if (f.life > 0 && wdist(f.wx, f.wy, boss.wx, boss.wy) < 20) {
         boss.hp--; boss.hit = 8; f.life = 0; boom(boss.wx, boss.wy, '#e8a020', 6); addShake(0.1);
       }
     }
@@ -614,15 +630,15 @@ function update() {
   }
   if (dog) {
     dog.t += 0.05; if (dog.hit > 0) dog.hit--;
-    const d = chase(dog, 2.2);
-    if (d < 24 && hurtCd === 0) {
+    const d = chase(dog, 1.3);
+    if (d < 10 && hurtCd === 0) {
       lives--; hurtCd = 90; updateHud(); addShake(0.45); sfx('hurt', 0.6);
       boom(player.wx, player.wy, '#ff3b3b', 10);
       popup('🐕 Pečův pes tě kousnul!');
       if (lives <= 0) { gameOver(); return; }
     }
     for (const f of fries) {
-      if (f.life > 0 && wdist(f.wx, f.wy, dog.wx, dog.wy) < 20) {
+      if (f.life > 0 && wdist(f.wx, f.wy, dog.wx, dog.wy) < 10) {
         dog.hp--; dog.hit = 8; f.life = 0; boom(dog.wx, dog.wy, '#e8a020', 5);
       }
     }
@@ -636,9 +652,9 @@ function update() {
     s.life--;
     // vybuchne při zásahu nepřítele (ne až na konci dráhy)
     const hitEnemy =
-      cogani.some(c => c.hp > 0 && wdist(s.wx, s.wy, c.wx, c.wy) < 42) ||
-      (boss && wdist(s.wx, s.wy, boss.wx, boss.wy) < 56) ||
-      (dog  && wdist(s.wx, s.wy, dog.wx, dog.wy)  < 32);
+      cogani.some(c => c.hp > 0 && wdist(s.wx, s.wy, c.wx, c.wy) < 18) ||
+      (boss && wdist(s.wx, s.wy, boss.wx, boss.wy) < 24) ||
+      (dog  && wdist(s.wx, s.wy, dog.wx, dog.wy)  < 14);
     if (hitEnemy || s.life <= 0) { smazakBoom(s.wx, s.wy); s.dead = true; }
   }
   smazaks = smazaks.filter(s => !s.dead);
@@ -656,12 +672,12 @@ function update() {
   // --- pytlíky párno (sběr) ---
   for (const b of bags) { b.t += 0.05; }
   for (const b of bags) {
-    if (wdist(b.wx, b.wy, player.wx, player.wy) < 34) {
+    if (wdist(b.wx, b.wy, player.wx, player.wy) < 14) {
       b.got = true; bagsGot++; score += 15;
       player.boostT = 300;   // ~5 s na 60 fps
       sfx('pickup', 0.6);
       boom(player.wx, player.wy, '#ffffff', 14);
-      popup('💊 Párno! 200% rychlost xd');
+      popup('💊 ' + rnd(PARNO_LINES));
       updateHud();
     }
   }
@@ -941,14 +957,19 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
-function drawJoystick() {
-  if (!joy.active) return;
-  ctx.globalAlpha = 0.35;
+function drawStick(j, col) {
+  if (!j.active) return;
+  ctx.globalAlpha = 0.30;
   ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(joy.baseX, joy.baseY, 55, 0, Math.PI*2); ctx.fill();
-  ctx.globalAlpha = 0.65;
-  ctx.beginPath(); ctx.arc(joy.baseX+joy.dx, joy.baseY+joy.dy, 26, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(j.bx, j.by, 55, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.arc(j.bx+j.dx, j.by+j.dy, 26, 0, Math.PI*2); ctx.fill();
   ctx.globalAlpha = 1;
+}
+function drawJoystick() {
+  drawStick(moveJoy, '#ffffff');   // pohyb
+  drawStick(aimJoy, '#ff5a4d');    // míření/střelba
 }
 
 function gtaText(text, x, y, size, fill = '#ffd700', stroke = '#000', sw = 6) {
@@ -1139,7 +1160,6 @@ function loop() {
     drawPopups();
     drawBanner();
     drawBossHpBar();
-    drawFryBtn();
     drawSmazakBtn();
     drawMuteBtn();
     drawJoystick();
