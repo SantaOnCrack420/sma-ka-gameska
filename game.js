@@ -27,14 +27,9 @@ resize();
 // ---------- Assets ----------
 const charImg = new Image(); charImg.src = 'assets/simmy_char.png';
 const menuBg  = new Image(); menuBg.src  = 'assets/menu_bg.png';
-const mapImg  = new Image(); mapImg.src  = 'assets/map.png';
 let charReady = false; charImg.onload = () => charReady = true;
 let menuReady = false; menuBg.onload  = () => menuReady = true;
-let mapReady  = false, mapFailed = false;
-mapImg.onload  = () => mapReady = true;
-mapImg.onerror = () => mapFailed = true;
-// pojistka: kdyby se mapa nenačetla do 8 s (slabý mobil), hraj na zelené zemi místo zaseknutí
-setTimeout(() => { if (!mapReady) mapFailed = true; }, 8000);
+// mapa se kreslí vektorově (mapvec.js) — žádný velký obrázek
 
 // ---------- Nastavení zvuku (perzistované) ----------
 let musicOn  = localStorage.getItem('smazak_musicOn') !== '0';
@@ -694,23 +689,53 @@ function update() {
 }
 
 // ---------- Vykreslení ----------
-// vykresli JEN viditelné dlaždice (zvládne libovolně velkou mapu)
+// ---------- Vektorová mapa (ostré 2.5D, kreslené naživo z dat) ----------
+let vGreen = [], vWaterP = [], vWaterL = [], vRoads = [], vRail = [], vBld = [];
+function aabb(a, s) { let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for (let i=s;i<a.length;i+=2){const x=a[i],y=a[i+1]; if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;} return [x0,y0,x1,y1]; }
+function prepVectors() {
+  if (typeof VEC_BLD === 'undefined') return;
+  vGreen  = VEC_GREEN.map(a => ({ a, bb: aabb(a,1) }));
+  vWaterP = VEC_WATERP.map(a => ({ a, bb: aabb(a,0) }));
+  vWaterL = VEC_WATERL.map(a => ({ a, bb: aabb(a,0) }));
+  vRoads  = VEC_ROADS.map(a => ({ a, bb: aabb(a,1) }));
+  vRail   = VEC_RAIL.map(a => ({ a, bb: aabb(a,0) }));
+  vBld    = VEC_BLD.map((a,i) => ({ a, bb: aabb(a,1), ci: i % 6 })).sort((p,q) => p.bb[3]-q.bb[3]);
+}
+const ROOFS = ['#c75b46','#b5503f','#cf6a4a','#9a8a6a','#a05040','#8a8a92'];
+const WALLS = ['#9a7f6a','#8f7560','#a08a72','#7d7060','#977f66','#6f6258'];
+const GCOL  = ['#5f7350','#79a85a','#4f7d3e'];   // hřbitov, tráva, les
+
 function drawMap() {
-  if (mapFailed) { ctx.fillStyle = '#5f7d4a'; ctx.fillRect(0, 0, VW, VH); return; }  // pojistka: zelená zem
-  ctx.fillStyle = '#10101c'; ctx.fillRect(0, 0, VW, VH);   // mimo mapu = tma
-  if (!mapReady) {
-    ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 22px Oswald, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('Načítám Těšín…', VW/2, VH/2);
-    return;
+  const S = ZOOM, ox = VW/2 - cam.x*S, oy = VH/2 - cam.y*S;
+  const X = wx => wx*S + ox, Y = wy => wy*S + oy;
+  const hw = VW/(2*S)+40, hh = VH/(2*S)+40;
+  const vx0=cam.x-hw, vx1=cam.x+hw, vy0=cam.y-hh, vy1=cam.y+hh;
+  const vis = bb => bb[0]<=vx1 && bb[2]>=vx0 && bb[1]<=vy1 && bb[3]>=vy0;
+  const path = (a, s) => { ctx.beginPath(); ctx.moveTo(X(a[s]),Y(a[s+1])); for (let i=s+2;i<a.length;i+=2) ctx.lineTo(X(a[i]),Y(a[i+1])); };
+
+  ctx.fillStyle = '#6f9b54'; ctx.fillRect(0, 0, VW, VH);   // tráva (podklad)
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  for (const o of vGreen)  { if (!vis(o.bb)) continue; path(o.a,1); ctx.closePath(); ctx.fillStyle=GCOL[o.a[0]]||'#79a85a'; ctx.fill(); }
+  ctx.fillStyle = '#4a90c4';
+  for (const o of vWaterP) { if (!vis(o.bb)) continue; path(o.a,0); ctx.closePath(); ctx.fill(); }
+  ctx.strokeStyle = '#4a90c4'; ctx.lineWidth = Math.max(2, 9*S);
+  for (const o of vWaterL) { if (!vis(o.bb)) continue; path(o.a,0); ctx.stroke(); }
+  const rww = c => c===2?9 : c===1?6 : c===0?3.5 : 2;
+  for (const o of vRoads)  { if (!vis(o.bb)||o.a[0]<0) continue; ctx.strokeStyle='#2b2b33'; ctx.lineWidth=(rww(o.a[0])+4)*S; path(o.a,1); ctx.stroke(); }  // obruba
+  for (const o of vRoads)  { if (!vis(o.bb)) continue; const c=o.a[0]; ctx.strokeStyle=c<0?'#8a8276':'#55555f'; ctx.lineWidth=Math.max(1,rww(c)*S); path(o.a,1); ctx.stroke(); }
+  ctx.strokeStyle = '#7a7a7a'; ctx.lineWidth = Math.max(2, 4*S);
+  for (const o of vRail)   { if (!vis(o.bb)) continue; path(o.a,0); ctx.stroke(); }
+  // budovy 2.5D (odzadu dopředu) — ostré hrany + výška
+  ctx.lineWidth = 1.2; ctx.strokeStyle = '#3a2c22';
+  for (const o of vBld) {
+    if (!vis(o.bb)) continue;
+    const a = o.a, h = a[0]*10.8*S;
+    ctx.beginPath(); ctx.moveTo(X(a[1])+3, Y(a[2])+5); for (let i=3;i<a.length;i+=2) ctx.lineTo(X(a[i])+3, Y(a[i+1])+5); ctx.closePath();
+    ctx.fillStyle = 'rgba(0,0,0,0.32)'; ctx.fill();                       // stín
+    path(a,1); ctx.closePath(); ctx.fillStyle = WALLS[o.ci]; ctx.fill();  // stěny
+    ctx.beginPath(); ctx.moveTo(X(a[1]), Y(a[2])-h); for (let i=3;i<a.length;i+=2) ctx.lineTo(X(a[i]), Y(a[i+1])-h); ctx.closePath();
+    ctx.fillStyle = ROOFS[o.ci]; ctx.fill(); ctx.stroke();                // střecha + hrana
   }
-  // viditelný výřez (zoom). Obrázek může být menší než logický svět → přepočet zdroje.
-  const ssx = mapImg.width / WPX, ssy = mapImg.height / WPY;
-  const srcW = VW/ZOOM, srcH = VH/ZOOM;
-  const sx = clamp(cam.x - srcW/2, 0, Math.max(0, WPX - srcW));
-  const sy = clamp(cam.y - srcH/2, 0, Math.max(0, WPY - srcH));
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(mapImg, sx*ssx, sy*ssy, srcW*ssx, srcH*ssy, 0, 0, VW, VH);
 }
 
 function drawPlayer() {
@@ -1188,6 +1213,7 @@ function loop() {
 }
 
 buildMap();
+prepVectors();
 showHud(false);
 loop();
 refreshLB();             // načti globální žebříček

@@ -1,14 +1,14 @@
-const CACHE = 'smazak-v35';
+const CACHE = 'smazak-v36';
 const FILES = [
   './',
   './index.html',
   './style.css',
   './game.js',
   './assets/mapdata.js',
+  './assets/mapvec.js',
   './manifest.json',
   './assets/simmy_char.png',
   './assets/menu_bg.png',
-  './assets/map.png',
 ];
 
 self.addEventListener('install', e => {
