@@ -725,9 +725,18 @@ function drawMap() {
   for (const o of vWaterP) { if (!vis(o.bb)) continue; path(o.a,0); ctx.closePath(); ctx.fill(); }
   ctx.strokeStyle = '#4a90c4'; ctx.lineWidth = Math.max(2, 9*S);
   for (const o of vWaterL) { if (!vis(o.bb)) continue; path(o.a,0); ctx.stroke(); }
-  const rww = c => c===2?9 : c===1?6 : c===0?3.5 : 2;
-  for (const o of vRoads)  { if (!vis(o.bb)||o.a[0]<0) continue; ctx.strokeStyle='#2b2b33'; ctx.lineWidth=(rww(o.a[0])+4)*S; path(o.a,1); ctx.stroke(); }  // obruba
-  for (const o of vRoads)  { if (!vis(o.bb)) continue; const c=o.a[0]; ctx.strokeStyle=c<0?'#8a8276':'#55555f'; ctx.lineWidth=Math.max(1,rww(c)*S); path(o.a,1); ctx.stroke(); }
+  // cesty: chodník (světlý široký) → asfalt (tmavý) → středová čára. Šířky v metrech × měřítko.
+  const PM = MAP_PXM, ms = PM * S;
+  const RD = { '2':[11,3], '1':[7,2.2], '0':[4.5,1.3], '-1':[2.4,0] };
+  const rm = c => RD[c] || RD['1'];
+  for (const o of vRoads) { if (!vis(o.bb)) continue; const m=rm(o.a[0]); if (m[1]<=0) continue;   // chodník
+    ctx.strokeStyle='#b9b3a6'; ctx.lineWidth=(m[0]+2*m[1])*ms; path(o.a,1); ctx.stroke(); }
+  for (const o of vRoads) { if (!vis(o.bb)) continue; const c=o.a[0], m=rm(c);                        // asfalt
+    ctx.strokeStyle=c<0?'#9a9286':'#454552'; ctx.lineWidth=Math.max(1.5,m[0]*ms); path(o.a,1); ctx.stroke(); }
+  ctx.setLineDash([10*S, 13*S]);                                                                      // středová čára (2 proudy)
+  for (const o of vRoads) { if (!vis(o.bb)||o.a[0]<1) continue;
+    ctx.strokeStyle='rgba(255,212,90,0.55)'; ctx.lineWidth=Math.max(1,0.5*ms); path(o.a,1); ctx.stroke(); }
+  ctx.setLineDash([]);
   ctx.strokeStyle = '#7a7a7a'; ctx.lineWidth = Math.max(2, 4*S);
   for (const o of vRail)   { if (!vis(o.bb)) continue; path(o.a,0); ctx.stroke(); }
   // budovy 2.5D (odzadu dopředu) — ostré hrany + výška
