@@ -10,18 +10,18 @@ const ctx = canvas.getContext('2d');
 // VW/VH = logické rozměry (CSS px). Backing store škálujeme podle DPR = ostrá retina grafika.
 let VW = window.innerWidth, VH = window.innerHeight;
 function resize() {
-  // strop DPR 2: na retina (DPR 3) by se kreslilo ~2× víc pixelů zbytečně = sekání
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  VW = window.innerWidth;
-  VH = window.innerHeight;
-  canvas.style.width = VW + 'px';
-  canvas.style.height = VH + 'px';
-  canvas.width = Math.round(VW * dpr);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);   // strop DPR 2 = méně sekání
+  // čteme SKUTEČNOU velikost canvasu (CSS 100%) — spolehlivé i po otočení na iOS
+  VW = canvas.clientWidth  || window.innerWidth;
+  VH = canvas.clientHeight || window.innerHeight;
+  canvas.width  = Math.round(VW * dpr);
   canvas.height = Math.round(VH * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // kreslíme v logických px, GPU dorenderuje ostře
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingQuality = 'high';
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => { resize(); setTimeout(resize, 250); setTimeout(resize, 600); });
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
 resize();
 
 // ---------- Assets ----------
@@ -696,7 +696,12 @@ function update() {
 // vykresli JEN viditelné dlaždice (zvládne libovolně velkou mapu)
 function drawMap() {
   ctx.fillStyle = '#10101c'; ctx.fillRect(0, 0, VW, VH);   // mimo mapu = tma
-  if (!mapReady) return;
+  if (!mapReady) {
+    ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 22px Oswald, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('Načítám Těšín…', VW/2, VH/2);
+    return;
+  }
   // vykresli jen viditelný výřez mapy, přiblížený na ZOOM
   const srcW = VW/ZOOM, srcH = VH/ZOOM;
   const sx = clamp(cam.x - srcW/2, 0, Math.max(0, WPX - srcW));
@@ -1028,18 +1033,22 @@ function drawMenu() {
   gBot.addColorStop(0, 'rgba(0,0,0,0)'); gBot.addColorStop(1, 'rgba(0,0,0,0.85)');
   ctx.fillStyle = gBot; ctx.fillRect(0, VH*0.55, VW, VH*0.45);
 
-  // --- Název hry (GTA styl) ---
-  const titleSize = Math.min(VW * 0.115, 56);
-  gtaText('GTA 7: TĚŠÍN CITY', VW/2, VH*0.10, titleSize, '#ffd23f', '#000', 8);
-  gtaText('Smažák s Hranolkama DLC', VW/2, VH*0.10 + titleSize*0.95, titleSize*0.5, '#ffffff', '#000', 5);
+  const land = VW > VH;   // na šířku = jiné rozložení
 
-  // --- 3 velké karty: NOVÁ HRA / TOP SMAŽKY / NASTAVENÍ ---
-  const cw = Math.min(VW*0.84, 360), ch = 64, gap = 16;
+  // --- Název hry (GTA styl) ---
+  const titleSize = land ? Math.min(VH*0.10, 34) : Math.min(VW*0.115, 56);
+  const titleY = land ? VH*0.14 : VH*0.10;
+  gtaText('GTA 7: TĚŠÍN CITY', VW/2, titleY, titleSize, '#ffd23f', '#000', land?6:8);
+  gtaText('Smažák s Hranolkama DLC', VW/2, titleY + titleSize*0.95, titleSize*0.5, '#ffffff', '#000', 5);
+
+  // --- 3 karty: NOVÁ HRA / TOP SMAŽKY / NASTAVENÍ ---
+  const cw = Math.min(land ? VW*0.5 : VW*0.84, 360);
+  const ch = land ? 46 : 62, gap = land ? 11 : 16;
   const x0 = VW/2 - cw/2;
-  let cy = VH*0.55;
-  menuBtn  = menuCard(x0, cy,            cw, ch+8, '▶  NOVÁ HRA',  true,  pendingStart);
-  lbBtn    = menuCard(x0, cy + ch+18,    cw, ch,   '🏆 TOP SMAŽKY', false, false);
-  settingsBtn = menuCard(x0, cy + 2*(ch+18), cw, ch, '⚙️ NASTAVENÍ', false, false);
+  let cy = land ? VH*0.36 : VH*0.54;
+  menuBtn  = menuCard(x0, cy,                cw, ch+6, '▶  NOVÁ HRA',  true,  pendingStart);
+  lbBtn    = menuCard(x0, cy + ch+gap,       cw, ch,   '🏆 TOP SMAŽKY', false, false);
+  settingsBtn = menuCard(x0, cy + 2*(ch+gap), cw, ch,  '⚙️ NASTAVENÍ', false, false);
 
   // --- Nick (změnit) vlevo nahoře ---
   ctx.font = `600 14px Oswald, sans-serif`;
