@@ -87,36 +87,27 @@
 
   // ── Merge geometrií (ručně — r128 UMD nemá BufferGeometryUtils v globálním THREE) ──
   function mergeGeometries(geoList) {
-    // Projde všechny geometrie a sloučí je do jedné BufferGeometry
-    // s manuálním spojením Float32Array atributů.
-    // Každá geo dostane vlastní color přes vertex colors.
+    // ExtrudeGeometry je BEZ indexu (triangle soup) → sloučíme bezindexově.
+    // Pojistka: kdyby přišla indexovaná geo, převedeme ji na non-indexed.
+    const parts = geoList.map(g => ({
+      geo: g.geo.index ? g.geo.toNonIndexed() : g.geo,
+      color: g.color,
+      roofColor: g.roofColor,
+    }));
+
     let totalVerts = 0;
-    let totalIdxs = 0;
-    for (const { geo } of geoList) {
-      geo.computeVertexNormals();
-      totalVerts += geo.attributes.position.count;
-      if (geo.index) totalIdxs += geo.index.count;
-    }
+    for (const { geo } of parts) totalVerts += geo.attributes.position.count;
 
     const positions = new Float32Array(totalVerts * 3);
-    const normals   = new Float32Array(totalVerts * 3);
     const colors    = new Float32Array(totalVerts * 3);
-    const indices   = new Uint32Array(totalIdxs);
-
-    let vOff = 0, iOff = 0, baseVertex = 0;
+    let vOff = 0;
     const colorObj = new THREE.Color();
 
-    for (const { geo, color, roofColor: rc } of geoList) {
+    for (const { geo, color, roofColor: rc } of parts) {
       const pos = geo.attributes.position.array;
-      const nor = geo.attributes.normal ? geo.attributes.normal.array : null;
       const cnt = geo.attributes.position.count;
 
-      // Počet vrcholů patřících bočním stěnám vs. střeše:
-      // ExtrudeGeometry: prvních (cap_verts) tvoří dvě čepice (dno+střecha),
-      // zbytek jsou boční stěny. Ale po rotateX je to proházeně.
-      // Jednodušší: rozlišíme dle Y-souřadnice po transformaci.
-      // Vrcholy s Y ≈ výška budovy = střecha; Y ≈ 0 = podlaha/stěna.
-      // Najdeme max Y v téhle geo.
+      // Střecha vs. stěna podle Y: vrcholy u nejvyššího Y = střecha.
       let maxY = -Infinity;
       for (let i = 1; i < pos.length; i += 3) {
         if (pos[i] > maxY) maxY = pos[i];
@@ -132,12 +123,6 @@
         positions[vOff * 3 + 0] = pos[vi + 0];
         positions[vOff * 3 + 1] = pos[vi + 1];
         positions[vOff * 3 + 2] = pos[vi + 2];
-        if (nor) {
-          normals[vOff * 3 + 0] = nor[vi + 0];
-          normals[vOff * 3 + 1] = nor[vi + 1];
-          normals[vOff * 3 + 2] = nor[vi + 2];
-        }
-        // Střecha = vrcholy u maxY (tolerance 0.05 m)
         if (Math.abs(pos[vi + 1] - maxY) < 0.05) {
           colors[vOff * 3 + 0] = roofR;
           colors[vOff * 3 + 1] = roofG;
@@ -149,21 +134,12 @@
         }
         vOff++;
       }
-
-      if (geo.index) {
-        const idx = geo.index.array;
-        for (let i = 0; i < idx.length; i++) {
-          indices[iOff++] = idx[i] + baseVertex;
-        }
-      }
-      baseVertex += cnt;
     }
 
     const merged = new THREE.BufferGeometry();
     merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    merged.setAttribute('normal',   new THREE.BufferAttribute(normals, 3));
     merged.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
-    merged.setIndex(new THREE.BufferAttribute(indices, 1));
+    // normály dopočítá volající přes computeVertexNormals() (ploché stěny)
     return merged;
   }
 
