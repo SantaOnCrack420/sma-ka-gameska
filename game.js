@@ -292,11 +292,19 @@ function touchEnd(id) {
   if (moveJoy.id === id) { moveJoy.active = false; moveJoy.id = -1; moveJoy.dx = 0; moveJoy.dy = 0; }
   if (fireTouch === id) { firing = false; fireTouch = -1; }
 }
-canvas.addEventListener('touchstart', e => { e.preventDefault(); for (const t of e.changedTouches) touchStart(t.clientX, t.clientY, t.identifier); }, {passive:false});
-canvas.addEventListener('touchmove',  e => { e.preventDefault(); for (const t of e.changedTouches) touchMove(t.clientX, t.clientY, t.identifier); }, {passive:false});
+// Přepočet client (viewport) → logické souřadnice plátna (VW/VH).
+// Řeší iOS 100vh ≠ viditelná plocha, notch, škálování — dotyk pak sedí na kreslení.
+function toLocal(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  const sx = r.width  ? VW / r.width  : 1;
+  const sy = r.height ? VH / r.height : 1;
+  return [ (clientX - r.left) * sx, (clientY - r.top) * sy ];
+}
+canvas.addEventListener('touchstart', e => { e.preventDefault(); for (const t of e.changedTouches) { const [x,y]=toLocal(t.clientX,t.clientY); touchStart(x, y, t.identifier); } }, {passive:false});
+canvas.addEventListener('touchmove',  e => { e.preventDefault(); for (const t of e.changedTouches) { const [x,y]=toLocal(t.clientX,t.clientY); touchMove(x, y, t.identifier); } }, {passive:false});
 canvas.addEventListener('touchend',   e => { e.preventDefault(); for (const t of e.changedTouches) touchEnd(t.identifier); }, {passive:false});
 canvas.addEventListener('mousedown', e => {
-  const x = e.clientX, y = e.clientY;
+  const [x, y] = toLocal(e.clientX, e.clientY);
   if (muteBtn && Math.hypot(x - muteBtn.x, y - muteBtn.y) < muteBtn.r + 8) { toggleMute(); return; }
   if (state === 'MENU') { if (!menuButtonsHit(x, y)) startOrClick(); return; }
   if (state !== 'PLAYING') { startOrClick(); return; }
@@ -1353,6 +1361,14 @@ if (location.search.indexOf('autotest') !== -1) {
         for (let i = 0; i < 120; i++) { if (typeof update === 'function') update(); }
         _diag('po 120x update=' + Math.round(player.wx) + ',' + Math.round(player.wy) + ' (z ' + Math.round(x0) + ',' + Math.round(y0) + ')');
       } catch (e) { _diag('MOVE TEST ERR: ' + e.message); }
+      // test dotykového mapování (toLocal): simuluj touchstart na 80,600
+      try {
+        moveJoy.active = false; moveJoy.id = -1;
+        const ev = new Event('touchstart', { bubbles: true, cancelable: true });
+        ev.changedTouches = [{ clientX: 80, clientY: 600, identifier: 7 }];
+        canvas.dispatchEvent(ev);
+        _diag('touch@80,600 → active=' + moveJoy.active + ' bx=' + Math.round(moveJoy.bx) + ' by=' + Math.round(moveJoy.by));
+      } catch (e) { _diag('TOUCH TEST ERR: ' + e.message); }
       // sesynchronizuj 3D obraz na novou pozici hráče
       try { for (let i = 0; i < 3; i++) R3D.renderFrame(); } catch (e) {}
       if (window.R3D && R3D.debug) _diag('R3D ' + JSON.stringify(R3D.debug()));
