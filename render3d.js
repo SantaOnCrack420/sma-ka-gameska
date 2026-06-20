@@ -487,13 +487,21 @@
   }
 
   // ── Billboard Šimmy ─────────────────────────────────────
+  // Walk-cycle sprite sheet: 8 snímků v jednom řádku (assets/simmy_walk.png)
+  const WALK_N = 8;
+  let walkTex = null, walkFrame = 0, walkAcc = 0;
   function buildSimmySprite() {
     const loader = new THREE.TextureLoader();
-    const tex = loader.load('assets/simmy_char.png',
+    const tex = loader.load('assets/simmy_walk.png',
       () => {},
       undefined,
-      (err) => { console.warn('[R3D] simmy_char.png načítání selhalo:', err); }
+      (err) => { console.warn('[R3D] simmy_walk.png načítání selhalo:', err); }
     );
+    tex.minFilter = THREE.LinearFilter;   // non-PoT sheet → bez mipmap (jinak černá)
+    tex.generateMipmaps = false;
+    tex.repeat.set(1 / WALK_N, 1);        // ukaž jen jeden snímek
+    tex.offset.set(0, 0);
+    walkTex = tex;
     // SpriteMaterial vždy čelí kameře — billboard zdarma
     const mat = new THREE.SpriteMaterial({
       map: tex,
@@ -502,9 +510,19 @@
       depthTest: false,    // hráč VŽDY navrch (v top-down ho nesmí zakrýt barák)
     });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(1.8, 3.2, 1);  // cca 1.8 × 3.2 m (lidská postava)
+    sprite.scale.set(1.6, 3.3, 1);  // poměr snímku 204:421 ≈ lidská postava
     sprite.renderOrder = 999;       // kresli po budovách
     return sprite;
+  }
+  // Přepínání snímků chůze (volá renderFrame): jde → cyklus, stojí → klid. snímek
+  function animateWalk(moving, dt) {
+    if (!walkTex) return;
+    if (moving) {
+      walkAcc += dt;
+      if (walkAcc > 0.07) { walkAcc = 0; walkFrame = (walkFrame + 1) % WALK_N; walkTex.offset.x = walkFrame / WALK_N; }
+    } else if (walkFrame !== 0) {
+      walkFrame = 0; walkAcc = 0; walkTex.offset.x = 0;
+    }
   }
 
   // ── Světla ───────────────────────────────────────────────
@@ -604,18 +622,21 @@
   }
 
   // ── Render frame ─────────────────────────────────────────
+  let _lastNow = 0;
   function renderFrame() {
     if (!initialized || !renderer) return;
 
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+    const dt = _lastNow ? Math.min(now - _lastNow, 0.1) : 0;
+    _lastNow = now;
+
     const player = typeof window.player !== 'undefined' ? window.player : null;
 
-    // Aktualizuj pozici Šimmyho
+    // Aktualizuj pozici Šimmyho + animaci chůze
     if (simmySprite && player) {
-      simmySprite.position.set(
-        wx2m(player.wx),
-        1.6,
-        wy2m(player.wy)
-      );
+      simmySprite.position.set(wx2m(player.wx), 1.65, wy2m(player.wy));
+      const moving = (player.vx * player.vx + player.vy * player.vy) > 0.02;
+      animateWalk(moving, dt);
     }
 
     // Aktualizuj kameru

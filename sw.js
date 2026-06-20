@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v54';   // bump: 3D funkční (window.player fix, sprite navrch, build tag)
+const CACHE = 'smazak-v55';   // bump: 3D funkční (window.player fix, sprite navrch, build tag)
 const FILES = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const FILES = [
   './assets/three.min.js',
   './manifest.json',
   './assets/simmy_char.png',
+  './assets/simmy_walk.png',
   './assets/menu_bg.png',
   './assets/icon.png',
   './assets/icon-512.png',
