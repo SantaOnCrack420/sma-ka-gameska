@@ -525,6 +525,147 @@
     }
   }
 
+  // ── POI billboardy (obchody/podniky) ────────────────────
+  const POI_ICON_3D = {
+    VECERKA:'🏪', KAUFLAND:'🛒', ALKOHOL:'🍾', STANEK:'🍫', TRAFIKA:'🚬',
+    FASTFOOD:'🌯', HOSPODA:'🍺', BAR:'🍸', ZASTAVARNA:'💰', LEKARNA:'💊',
+    BANKA:'🏧', PEKARNA:'🥖', RESTAURACE:'🍽️', REZNIK:'🥩', TRZNICE:'🛍️', PUMPA:'⛽',
+  };
+
+  let poiSprites = [];   // pole { sprite, wx, wy, hasName }
+  let poiGroup = null;
+
+  function makePOITexture(icon, name) {
+    const W = 256, H = name ? 128 : 80;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // průhledné pozadí
+    ctx.clearRect(0, 0, W, H);
+
+    // tmavý zaoblený rámeček (jen když je název)
+    if (name) {
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      const r = 14;
+      ctx.beginPath();
+      ctx.moveTo(r, 0); ctx.lineTo(W - r, 0);
+      ctx.quadraticCurveTo(W, 0, W, r);
+      ctx.lineTo(W, H - r); ctx.quadraticCurveTo(W, H, W - r, H);
+      ctx.lineTo(r, H); ctx.quadraticCurveTo(0, H, 0, H - r);
+      ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // jen malý kruh za ikonou
+      ctx.fillStyle = 'rgba(0,0,0,0.60)';
+      const cx = W / 2, cy = H / 2;
+      ctx.beginPath(); ctx.arc(cx, cy, 36, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Ikona (velká emoji)
+    ctx.font = name ? '52px serif' : '48px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const iconY = name ? 46 : H / 2;
+    ctx.fillText(icon, W / 2, iconY);
+
+    // Název (bílý text s tmavým obrysem)
+    if (name) {
+      const txt = name.length > 20 ? name.slice(0, 19) + '…' : name;
+      ctx.font = 'bold 22px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // obrys
+      ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+      ctx.lineWidth = 4;
+      ctx.strokeText(txt, W / 2, 96);
+      // text
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(txt, W / 2, 96);
+    }
+
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  function buildPOI() {
+    if (typeof POI === 'undefined' || POI.length === 0) {
+      console.warn('[R3D] POI data nedostupná');
+      return null;
+    }
+
+    const group = new THREE.Group();
+    poiSprites = [];
+    let count = 0, skipped = 0;
+
+    for (const entry of POI) {
+      if (!Array.isArray(entry) || entry.length < 3) { skipped++; continue; }
+      const [role, wx, wy, name] = entry;
+      if (typeof wx !== 'number' || typeof wy !== 'number') { skipped++; continue; }
+
+      const icon = POI_ICON_3D[role] || '📍';
+      const displayName = (name && name.trim()) ? name.trim() : '';
+      const hasName = displayName.length > 0;
+
+      let tex;
+      try {
+        tex = makePOITexture(icon, displayName);
+      } catch (e) {
+        skipped++;
+        continue;
+      }
+
+      const mat = new THREE.SpriteMaterial({
+        map: tex,
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,   // vždy viditelný (jako Šimmy) — barák nezakryje ikonu
+        fog: false,         // ikona není zahmlena — vždy plně viditelná
+      });
+
+      const sprite = new THREE.Sprite(mat);
+
+      // Rozměry: šířka 14 m (s názvem) / 8 m (jen ikona) — čitelné z ~150 m
+      const sw = hasName ? 14 : 8;
+      const sh = hasName ? 7 : 8;
+      sprite.scale.set(sw, sh, 1);
+
+      const x = wx2m(wx);
+      const z = wy2m(wy);
+      // Y=2 m — nízko nad zemí; strmá GTA kamera + HUD pruh nahoře → vyšší Y
+      // promítá ikonu k hornímu okraji/pod HUD. 2 m drží ikonu v čitelné části.
+      sprite.position.set(x, 2, z);
+
+      sprite.renderOrder = 10;  // po budovách, pod Šimmym (999)
+      group.add(sprite);
+      poiSprites.push({ sprite, wx, wy, hasName });
+      count++;
+    }
+
+    console.log('[R3D] POI billboardy:', count, '| přeskočeno:', skipped);
+    return group;
+  }
+
+  // Aktualizuj viditelnost názvů podle vzdálenosti hráče
+  const POI_NAME_DIST = 60 * 3.6;  // 60 m v px (60 * PXM)
+  function updatePOIVisibility() {
+    const player = typeof window.player !== 'undefined' ? window.player : null;
+    if (!player || poiSprites.length === 0) return;
+    const px = player.wx, py = player.wy;
+    for (const p of poiSprites) {
+      if (!p.hasName) continue;  // bez názvu vždy stejné
+      const dx = px - p.wx, dy = py - p.wy;
+      const dist2 = dx * dx + dy * dy;
+      const visible = dist2 < POI_NAME_DIST * POI_NAME_DIST;
+      // blízko: plný billboard s názvem; daleko: jen ikonová část (canvas je stejný, jen scale)
+      if (visible) {
+        p.sprite.scale.set(14, 7, 1);
+      } else {
+        p.sprite.scale.set(8, 8, 1);  // čtvercový — ukáže jen horní část (ikona)
+      }
+    }
+  }
+
   // ── Světla ───────────────────────────────────────────────
   function setupLights(scene) {
     // Slunce pod úhlem (GTA denní světlo)
@@ -586,6 +727,10 @@
     const cityMesh = buildCityMesh();
     if (cityMesh) scene.add(cityMesh);
 
+    // POI billboardy (obchody/podniky)
+    poiGroup = buildPOI();
+    if (poiGroup) scene.add(poiGroup);
+
     // Šimmy billboard
     simmySprite = buildSimmySprite();
     simmySprite.position.set(
@@ -642,6 +787,9 @@
     // Aktualizuj kameru
     _updateCamera();
 
+    // Aktualizuj viditelnost POI názvů
+    updatePOIVisibility();
+
     renderer.render(scene, camera);
   }
 
@@ -664,6 +812,16 @@
       tex: simmySprite && simmySprite.material.map ? (simmySprite.material.map.image ? 'loaded' : 'pending') : 'none',
       cam: camera ? [Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z)] : null,
       sceneKids: scene ? scene.children.length : 0,
+      poiSprites: poiSprites.length,
+      poiNear: (() => {
+        const player = window.player; if (!player || !camera || !poiSprites.length) return null;
+        let best = null, bd = 1e18;
+        for (const p of poiSprites) { const dx = player.wx - p.wx, dy = player.wy - p.wy, d = dx*dx+dy*dy; if (d < bd) { bd = d; best = p; } }
+        if (!best) return null;
+        const v = best.sprite.position.clone().project(camera);   // NDC: x,y ∈[-1,1] = ve frame; z<1 = před kamerou
+        const img = best.sprite.material.map && best.sprite.material.map.image;
+        return { distM: Math.round(Math.sqrt(bd)/PXM), ndc: [v.x.toFixed(2), v.y.toFixed(2), v.z.toFixed(2)], tex: img ? (img.width+'x'+img.height) : 'no-img' };
+      })(),
     }),
   };
 

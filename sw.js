@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v55';   // bump: 3D funkční (window.player fix, sprite navrch, build tag)
+const CACHE = 'smazak-v56';   // bump: 3D funkční (window.player fix, sprite navrch, build tag)
 const FILES = [
   './',
   './index.html',

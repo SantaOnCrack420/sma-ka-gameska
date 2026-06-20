@@ -1352,6 +1352,12 @@ if (location.search.indexOf('autotest') !== -1) {
     try { if (typeof hideNick === 'function') hideNick(); } catch (e) {}
     try { startGame(); _diag('startGame OK'); } catch (e) { _diag('startGame THROW: ' + e.message); }
     try { if (window.R3D) R3D.init(); } catch (e) { _diag('R3D.init THROW: ' + e.message); }   // hned, jako na mobilu
+    // teleport pro testovací screenshot (?tx=..&ty=..)
+    try {
+      const q = new URLSearchParams(location.search);
+      const tx = parseFloat(q.get('tx')), ty = parseFloat(q.get('ty'));
+      if (!isNaN(tx) && !isNaN(ty)) { player.wx = tx; player.wy = ty; player.vx = player.vy = 0; _diag('teleport ' + tx + ',' + ty); }
+    } catch (e) {}
     setTimeout(() => {
       _diag('VEC_BLD=' + (typeof VEC_BLD !== 'undefined' ? VEC_BLD.length : 'UNDEF'));
       // test pohybu: zapni joystick doprava a zavolej update() 120× přímo
@@ -1369,6 +1375,12 @@ if (location.search.indexOf('autotest') !== -1) {
         canvas.dispatchEvent(ev);
         _diag('touch@80,600 → active=' + moveJoy.active + ' bx=' + Math.round(moveJoy.bx) + ' by=' + Math.round(moveJoy.by));
       } catch (e) { _diag('TOUCH TEST ERR: ' + e.message); }
+      // finální teleport (přepíše posun z testu pohybu) — pro screenshot na místě
+      try {
+        const q = new URLSearchParams(location.search);
+        const tx = parseFloat(q.get('tx')), ty = parseFloat(q.get('ty'));
+        if (!isNaN(tx) && !isNaN(ty)) { player.wx = tx; player.wy = ty; player.vx = player.vy = 0; }
+      } catch (e) {}
       // sesynchronizuj 3D obraz na novou pozici hráče
       try { for (let i = 0; i < 3; i++) R3D.renderFrame(); } catch (e) {}
       if (window.R3D && R3D.debug) _diag('R3D ' + JSON.stringify(R3D.debug()));
