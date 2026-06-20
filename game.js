@@ -5,8 +5,11 @@
 'use strict';
 
 // ---------- Canvas ----------
+// gameCanvas = WebGL 3D renderer (spodní)
+// menuCanvas = 2D overlay pro menu/gameover (horní, pointer-events:none)
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const menuCanvas = document.getElementById('menuCanvas');
+const ctx = menuCanvas.getContext('2d');   // 2D kontext JEN na overlay — žádný konflikt s WebGL
 // VW/VH = logické rozměry (CSS px). Backing store škálujeme podle DPR = ostrá retina grafika.
 let VW = window.innerWidth, VH = window.innerHeight;
 function resize() {
@@ -14,10 +17,14 @@ function resize() {
   // čteme SKUTEČNOU velikost canvasu (CSS 100%) — spolehlivé i po otočení na iOS
   VW = canvas.clientWidth  || window.innerWidth;
   VH = canvas.clientHeight || window.innerHeight;
-  canvas.width  = Math.round(VW * dpr);
-  canvas.height = Math.round(VH * dpr);
+  // gameCanvas: Three.js nastaví canvas.width/height sám přes setSize — nenastavuj ručně!
+  // Menu overlay (menuCanvas) — DPR škálování pro ostré 2D text/grafiku
+  menuCanvas.width  = Math.round(VW * dpr);
+  menuCanvas.height = Math.round(VH * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingQuality = 'high';
+  // Informuj R3D o novém rozměru (pokud je inicializováno)
+  if (typeof R3D !== 'undefined' && R3D.resize) R3D.resize();
 }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => { resize(); setTimeout(resize, 250); setTimeout(resize, 600); });
@@ -191,7 +198,7 @@ function showHud(on) { if (ui) ui.style.display = on ? 'flex' : 'none'; }
 // ---------- Svět (reálný Český Těšín — obrázek + kolize z OSM) ----------
 const WPX = MAP_IMG_W, WPY = MAP_IMG_H;   // svět = pixely mapy
 const ZOOM = 2.1;                          // přiblížení (mapa je teď ve velkém měřítku 3,6 px/m)
-const COMBAT = true;                       // Fáze B = boj zapnut
+const COMBAT = false;                      // M1 = klidná procházka 3D Těšínem (boj se vrátí v kroku 2 s 3D nepřáteli)
 const SPAWN_WX = SPAWN_PX[0];
 const SPAWN_WY = SPAWN_PX[1];
 
@@ -521,26 +528,51 @@ function update() {
 
   // --- pohyb (levý joystick / WASD) ---
   let mdx = 0, mdy = 0;
-  if (moveJoy.active && (moveJoy.dx || moveJoy.dy)) { mdx = moveJoy.dx; mdy = moveJoy.dy; }
-  else {
+  const JOY_MAX = 55;   // maximální výchylka joysticku (px)
+  if (moveJoy.active && (moveJoy.dx || moveJoy.dy)) {
+    // ANALOG: rychlost úměrná výchylce palce (ne vždy plný plyn)
+    const jl = Math.hypot(moveJoy.dx, moveJoy.dy);
+    const analog = Math.min(jl / JOY_MAX, 1.0);  // 0–1 dle výchylky
+    mdx = (moveJoy.dx / (jl || 1)) * analog;
+    mdy = (moveJoy.dy / (jl || 1)) * analog;
+  } else {
     if (keys['ArrowLeft']  || keys['a'] || keys['A']) mdx -= 1;
     if (keys['ArrowRight'] || keys['d'] || keys['D']) mdx += 1;
     if (keys['ArrowUp']    || keys['w'] || keys['W']) mdy -= 1;
     if (keys['ArrowDown']  || keys['s'] || keys['S']) mdy += 1;
+    const kl = Math.hypot(mdx, mdy) || 1;
+    if (mdx || mdy) { mdx /= kl; mdy /= kl; }  // normalizace klávesnice
   }
   if (player.boostT > 0) player.boostT--;
   const spd = player.speed * (player.boostT > 0 ? 2 : 1);   // párno = 200 %
   if (mdx || mdy) {
-    const l = Math.hypot(mdx, mdy) || 1;
-    player.vx = (mdx/l)*spd;
-    player.vy = (mdy/l)*spd;
-    if (mdx > 0.15) facing = 1; else if (mdx < -0.15) facing = -1;
-  } else { player.vx *= 0.7; player.vy *= 0.7; }
+    player.vx = mdx * spd;
+    player.vy = mdy * spd;
+    if (mdx > 0.05) facing = 1; else if (mdx < -0.05) facing = -1;
+  } else {
+    // TVRDÉ zastavení — žádný drift (*0.7 bylo klouzání)
+    player.vx = 0;
+    player.vy = 0;
+  }
 
+  // Kolize s poloměrem hráče (ne bodová) — testuj 4 body kolem hráče
+  const PR = 10;   // poloměr hráče v svět-px
   let nx = player.wx + player.vx;
-  if (!isSolidAt(nx, player.wy)) player.wx = nx;
+  // Test předního boku (kolmo na pohyb)
+  const solidX =
+    isSolidAt(nx + PR, player.wy) ||
+    isSolidAt(nx - PR, player.wy) ||
+    isSolidAt(nx, player.wy + PR) ||
+    isSolidAt(nx, player.wy - PR);
+  if (!solidX) player.wx = nx;
+
   let ny = player.wy + player.vy;
-  if (!isSolidAt(player.wx, ny)) player.wy = ny;
+  const solidY =
+    isSolidAt(player.wx + PR, ny) ||
+    isSolidAt(player.wx - PR, ny) ||
+    isSolidAt(player.wx, ny + PR) ||
+    isSolidAt(player.wx, ny - PR);
+  if (!solidY) player.wy = ny;
 
   updateCam();
 
@@ -1215,36 +1247,55 @@ function drawGameOver() {
 
 // ---------- Smyčka ----------
 let lbTick = 0;
+// Lazy init R3D při prvním přechodu do PLAYING
+let r3dReady = false;
+function ensureR3D() {
+  if (!r3dReady && typeof R3D !== 'undefined') {
+    R3D.init();
+    r3dReady = true;
+  }
+}
+
 function loop() {
   // průběžně obnov globální žebříček (mimo hru, ~každých 6 s)
   if (state !== 'PLAYING' && (++lbTick % 360 === 0)) refreshLB();
   // klikací efekt menu → po doznění spusť hru
   if (pendingStart) { if (menuPress > 0) menuPress--; else { pendingStart = false; startGame(); } }
   if (hitstop > 0) hitstop--; else update();   // hitstop = mikro-zmrazení
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, VW, VH);
 
-  if (state === 'MENU') {
-    drawMenu();
-    drawMuteBtn();
+  if (state === 'MENU' || state === 'OVER') {
+    // ── 2D MENU / GAME OVER: kreslíme na menuCanvas overlay ──
+    // menuCanvas je viditelný, gameCanvas je v pozadí (jen barva pozadí)
+    ctx.clearRect(0, 0, VW, VH);
+    if (state === 'MENU') {
+      drawMenu();
+      drawMuteBtn();
+    } else {
+      // OVER: nejdřív jednoduchý 3D frame v pozadí, pak 2D overlay
+      if (r3dReady) R3D.renderFrame();
+      drawGameOver();
+      drawMuteBtn();
+    }
   } else {
-    // screen shake: posuň svět (ne UI) podle trauma²
-    const s = trauma * trauma * 16;
-    const shx = Math.round((Math.random()*2-1) * s), shy = Math.round((Math.random()*2-1) * s);
+    // ── 3D PLAYING: WebGL na gameCanvas, 2D HUD na menuCanvas ──
+    ensureR3D();
+    // Vymaz 2D overlay (průhledný — HUD je DOM, jen joystick+bannery přes ctx)
+    ctx.clearRect(0, 0, VW, VH);
+
+    // WebGL 3D render
+    R3D.renderFrame();
+
+    // HUD prvky přes menuCanvas (joystick, bannery, tlačítka, popupy)
+    // screen shake: posuň 2D HUD vrstvu (NE 3D scénu)
+    const shakeAmt = trauma * trauma * 16;
+    const shx = Math.round((Math.random()*2-1) * shakeAmt);
+    const shy = Math.round((Math.random()*2-1) * shakeAmt);
     ctx.save();
     ctx.translate(shx, shy);
-    drawMap();
-    drawPOI();
-    drawParticles();
-    drawBags();
-    drawPigeons();
-    drawSmazaks();
-    drawCogani();
-    drawDog();
-    drawBoss();
-    drawFries();
-    drawPlayer();
+    // Particles a fries zatím bez 3D, přeskočíme v kroku 1
+    // (logika běží dál, jen vizuál chybí — přijde v kroku 2)
     ctx.restore();
+
     // UI bez otřesu
     drawPopups();
     drawBanner();
@@ -1253,7 +1304,6 @@ function loop() {
     drawSmazakBtn();
     drawMuteBtn();
     drawJoystick();
-    if (state === 'OVER') drawGameOver();
   }
   requestAnimationFrame(loop);
 }

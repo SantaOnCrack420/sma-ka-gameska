@@ -1,15 +1,20 @@
-const CACHE = 'smazak-v40';
+const CACHE = 'smazak-v51';   // bump: 3D engine fix + nová ikona (GTA VII Těšín)
 const FILES = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './render3d.js',
   './assets/mapdata.js',
   './assets/mapvec.js',
   './assets/mappoi.js',
+  './assets/three.min.js',
   './manifest.json',
   './assets/simmy_char.png',
   './assets/menu_bg.png',
+  './assets/icon.png',
+  './assets/icon-512.png',
+  './assets/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', e => {
