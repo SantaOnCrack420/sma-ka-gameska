@@ -15,7 +15,11 @@ FLAGS=(--headless=new --disable-gpu --enable-unsafe-swiftshader --hide-scrollbar
        --no-first-run --no-default-browser-check --window-size=400,820
        --virtual-time-budget=9000)
 
-# počkej až server běží
+# server: pokud neběží, spusť ho na pozadí
+if ! curl -sf "http://localhost:${PORT}/" >/dev/null 2>&1; then
+  echo "[shot] startuji http server na :${PORT}"
+  ( cd "$(dirname "$0")/.." && nohup python3 -m http.server "${PORT}" --bind 0.0.0.0 >/tmp/smazak_http.log 2>&1 & )
+fi
 for i in $(seq 1 20); do curl -sf "http://localhost:${PORT}/" >/dev/null 2>&1 && break; sleep 0.5; done
 
 rm -f "$SHOT_WSL" "$DOM_WSL"

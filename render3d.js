@@ -197,6 +197,295 @@
     return mesh;
   }
 
+  // ── Helper: ribbon (stuha) ze segmentů linky ─────────────────────────────
+  // Vrátí non-indexed BufferGeometry: obdélníky kolmé na trasu.
+  function buildRibbon(coords, halfWidth) {
+    // coords = [x0,z0, x1,z1, ...]  (již v metrech)
+    const verts = [];
+    const n = Math.floor(coords.length / 2);
+    if (n < 2) return null;
+
+    for (let i = 0; i < n - 1; i++) {
+      const ax = coords[i * 2], az = coords[i * 2 + 1];
+      const bx = coords[i * 2 + 2], bz = coords[i * 2 + 3];
+      // směrový vektor segmentu
+      const dx = bx - ax, dz = bz - az;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len < 0.001) continue;
+      // normála kolmá (otočena o 90°)
+      const nx = -dz / len * halfWidth;
+      const nz = dx / len * halfWidth;
+
+      // 4 rohy kvádříku (2 trojúhelníky)
+      const l0x = ax - nx, l0z = az - nz;
+      const r0x = ax + nx, r0z = az + nz;
+      const l1x = bx - nx, l1z = bz - nz;
+      const r1x = bx + nx, r1z = bz + nz;
+
+      // tri 1: l0, r0, l1
+      verts.push(l0x, 0, l0z, r0x, 0, r0z, l1x, 0, l1z);
+      // tri 2: r0, r1, l1
+      verts.push(r0x, 0, r0z, r1x, 0, r1z, l1x, 0, l1z);
+    }
+    if (verts.length === 0) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+    return geo;
+  }
+
+  // ── Helper: polygon → ShapeGeometry ploše ─────────────────────────────────
+  // coords = [x0,z0, x1,z1, ...] v metrech.
+  // Vrátí non-indexed BufferGeometry (hotovo přes toNonIndexed).
+  function buildPolygon(coords) {
+    const n = Math.floor(coords.length / 2);
+    if (n < 3) return null;
+    try {
+      const shape = new THREE.Shape();
+      shape.moveTo(coords[0], coords[1]);
+      for (let i = 1; i < n; i++) {
+        shape.lineTo(coords[i * 2], coords[i * 2 + 1]);
+      }
+      shape.closePath();
+      const geo = new THREE.ShapeGeometry(shape);
+      // ShapeGeometry je v XY rovině — položíme naplocho do XZ:
+      geo.rotateX(-Math.PI / 2);
+      return geo.index ? geo.toNonIndexed() : geo;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ── Helper: sloučení geometrií jedné barvy ────────────────────────────────
+  function mergeFlat(geoList) {
+    // Všechny geo jsou non-indexed, mají jen 'position'.
+    let total = 0;
+    for (const g of geoList) total += g.attributes.position.count;
+    if (total === 0) return null;
+    const arr = new Float32Array(total * 3);
+    let off = 0;
+    for (const g of geoList) {
+      const src = g.attributes.position.array;
+      arr.set(src, off);
+      off += src.length;
+    }
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    return merged;
+  }
+
+  // ── Helper: přepočet pole svět-px na metry ────────────────────────────────
+  // a = [optCode?, x0, y0, x1, y1, ...] — vrátí [xm, zm, xm, zm, ...] jen souřadnice
+  function pxCoordsToM(a, hasCode) {
+    const start = hasCode ? 1 : 0;
+    const out = [];
+    for (let i = start; i + 1 < a.length; i += 2) {
+      out.push(wx2m(a[i]), wy2m(a[i + 1]));
+    }
+    return out;
+  }
+
+  // ── Zeleň ────────────────────────────────────────────────
+  function buildGreen() {
+    if (typeof VEC_GREEN === 'undefined' || VEC_GREEN.length === 0) return null;
+
+    const colorMap = {
+      0: 0x5f7350,   // hřbitov
+      1: 0x79a85a,   // tráva
+      2: 0x4f7d3e,   // les
+    };
+    const byColor = {};  // hex → [geo, ...]
+
+    for (const a of VEC_GREEN) {
+      if (!a || a.length < 7) continue;  // min 3 body + kód
+      const code = a[0];
+      const color = colorMap[code] !== undefined ? colorMap[code] : 0x79a85a;
+      const coords = pxCoordsToM(a, true);
+      const geo = buildPolygon(coords);
+      if (!geo) continue;
+      // Posuň Y nahoru (z-fighting: zeleň nejníž)
+      const pos = geo.attributes.position.array;
+      for (let i = 1; i < pos.length; i += 3) pos[i] = 0.02;
+      geo.attributes.position.needsUpdate = true;
+      if (!byColor[color]) byColor[color] = [];
+      byColor[color].push(geo);
+    }
+
+    const group = new THREE.Group();
+    for (const [colorHex, geoList] of Object.entries(byColor)) {
+      const merged = mergeFlat(geoList);
+      if (!merged) continue;
+      merged.computeVertexNormals();
+      const mat = new THREE.MeshLambertMaterial({ color: parseInt(colorHex) });
+      group.add(new THREE.Mesh(merged, mat));
+    }
+    console.log('[R3D] Zeleň OK, skupin barev:', Object.keys(byColor).length);
+    return group;
+  }
+
+  // ── Voda (polygony + linie) ────────────────────────────────
+  function buildWater() {
+    const geoList = [];
+
+    // Polygony vody (VEC_WATERP) — BEZ kódu na začátku
+    if (typeof VEC_WATERP !== 'undefined' && VEC_WATERP.length > 0) {
+      for (const a of VEC_WATERP) {
+        if (!a || a.length < 6) continue;
+        const coords = pxCoordsToM(a, false);
+        const geo = buildPolygon(coords);
+        if (!geo) continue;
+        const pos = geo.attributes.position.array;
+        for (let i = 1; i < pos.length; i += 3) pos[i] = 0.05;
+        geo.attributes.position.needsUpdate = true;
+        geoList.push(geo);
+      }
+      console.log('[R3D] VEC_WATERP:', VEC_WATERP.length, 'polygonů');
+    }
+
+    // Vodní linie (VEC_WATERL) — stuha ~9 m (halfWidth 4.5 m), BEZ kódu
+    if (typeof VEC_WATERL !== 'undefined' && VEC_WATERL.length > 0) {
+      for (const a of VEC_WATERL) {
+        if (!a || a.length < 4) continue;
+        const coords = pxCoordsToM(a, false);
+        const geo = buildRibbon(coords, 4.5);
+        if (!geo) continue;
+        const pos = geo.attributes.position.array;
+        for (let i = 1; i < pos.length; i += 3) pos[i] = 0.05;
+        geo.attributes.position.needsUpdate = true;
+        geoList.push(geo);
+      }
+      console.log('[R3D] VEC_WATERL:', VEC_WATERL.length, 'linií');
+    }
+
+    if (geoList.length === 0) {
+      console.log('[R3D] Voda: žádná data');
+      return null;
+    }
+    const merged = mergeFlat(geoList);
+    if (!merged) return null;
+    merged.computeVertexNormals();
+    const mat = new THREE.MeshLambertMaterial({ color: 0x4a90c4 });
+    console.log('[R3D] Voda OK');
+    return new THREE.Mesh(merged, mat);
+  }
+
+  // ── Silnice ───────────────────────────────────────────────
+  // Šířky [asfalt_m, chodník_m_každá_strana]:
+  const ROAD_WIDTHS = {
+    '2': [11, 3],
+    '1': [7, 2.2],
+    '0': [4.5, 1.3],
+    '-1': [2.4, 0],
+  };
+
+  function buildRoads() {
+    if (typeof VEC_ROADS === 'undefined' || VEC_ROADS.length === 0) return null;
+
+    const sidewalkGeos = [];
+    const asphaltGeos  = [];
+
+    for (const a of VEC_ROADS) {
+      if (!a || a.length < 5) continue;
+      const code = String(a[0]);
+      const widths = ROAD_WIDTHS[code] || ROAD_WIDTHS['0'];
+      const asphaltHalf = widths[0] / 2;
+      const sidewalkHalf = asphaltHalf + widths[1];
+
+      const coords = pxCoordsToM(a, true);
+      if (coords.length < 4) continue;
+
+      // Chodník (širší) — jen pokud má chodník
+      if (widths[1] > 0) {
+        const geoSW = buildRibbon(coords, sidewalkHalf);
+        if (geoSW) {
+          const pos = geoSW.attributes.position.array;
+          for (let i = 1; i < pos.length; i += 3) pos[i] = 0.07;
+          geoSW.attributes.position.needsUpdate = true;
+          sidewalkGeos.push(geoSW);
+        }
+      }
+
+      // Asfalt (užší)
+      const asphaltColor = (parseInt(code) < 0) ? 0x9a9286 : 0x454552;
+      const geoAS = buildRibbon(coords, asphaltHalf);
+      if (geoAS) {
+        const pos = geoAS.attributes.position.array;
+        for (let i = 1; i < pos.length; i += 3) pos[i] = 0.09;
+        geoAS.attributes.position.needsUpdate = true;
+        // Třídu <0 přidáme do oddělené skupiny pro jinou barvu
+        if (parseInt(code) < 0) {
+          // Malé cestičky — jiná barva asfalt
+          geoAS._altColor = true;
+        }
+        asphaltGeos.push(geoAS);
+      }
+    }
+
+    const group = new THREE.Group();
+
+    // Chodníky
+    if (sidewalkGeos.length > 0) {
+      const merged = mergeFlat(sidewalkGeos);
+      if (merged) {
+        merged.computeVertexNormals();
+        const mat = new THREE.MeshLambertMaterial({ color: 0xb9b3a6 });
+        group.add(new THREE.Mesh(merged, mat));
+      }
+    }
+
+    // Asfalt — hlavní silnice (kód >= 0)
+    const mainGeos = asphaltGeos.filter(g => !g._altColor);
+    const altGeos  = asphaltGeos.filter(g => g._altColor);
+
+    if (mainGeos.length > 0) {
+      const merged = mergeFlat(mainGeos);
+      if (merged) {
+        merged.computeVertexNormals();
+        const mat = new THREE.MeshLambertMaterial({ color: 0x454552 });
+        group.add(new THREE.Mesh(merged, mat));
+      }
+    }
+    if (altGeos.length > 0) {
+      const merged = mergeFlat(altGeos);
+      if (merged) {
+        merged.computeVertexNormals();
+        const mat = new THREE.MeshLambertMaterial({ color: 0x9a9286 });
+        group.add(new THREE.Mesh(merged, mat));
+      }
+    }
+
+    console.log('[R3D] Silnice OK, segmentů:', VEC_ROADS.length,
+      '| chodník geo:', sidewalkGeos.length, '| asfalt geo:', asphaltGeos.length);
+    return group;
+  }
+
+  // ── Koleje ────────────────────────────────────────────────
+  function buildRail() {
+    if (typeof VEC_RAIL === 'undefined' || VEC_RAIL.length === 0) {
+      console.log('[R3D] VEC_RAIL: prázdné');
+      return null;
+    }
+
+    const geoList = [];
+    for (const a of VEC_RAIL) {
+      if (!a || a.length < 4) continue;
+      const coords = pxCoordsToM(a, false);
+      const geo = buildRibbon(coords, 2.0);  // ~4 m celková šířka
+      if (!geo) continue;
+      const pos = geo.attributes.position.array;
+      for (let i = 1; i < pos.length; i += 3) pos[i] = 0.08;
+      geo.attributes.position.needsUpdate = true;
+      geoList.push(geo);
+    }
+
+    if (geoList.length === 0) return null;
+    const merged = mergeFlat(geoList);
+    if (!merged) return null;
+    merged.computeVertexNormals();
+    const mat = new THREE.MeshLambertMaterial({ color: 0x7a7a7a });
+    console.log('[R3D] Koleje OK, linií:', VEC_RAIL.length);
+    return new THREE.Mesh(merged, mat);
+  }
+
   // ── Billboard Šimmy ─────────────────────────────────────
   function buildSimmySprite() {
     const loader = new THREE.TextureLoader();
@@ -261,6 +550,19 @@
 
     // Podlaha
     scene.add(buildFloor());
+
+    // Detail země (silnice, zeleň, voda, koleje) — pod budovami
+    const greenMesh = buildGreen();
+    if (greenMesh) scene.add(greenMesh);
+
+    const waterMesh = buildWater();
+    if (waterMesh) scene.add(waterMesh);
+
+    const railMesh = buildRail();
+    if (railMesh) scene.add(railMesh);
+
+    const roadsMesh = buildRoads();
+    if (roadsMesh) scene.add(roadsMesh);
 
     // Budovy
     const cityMesh = buildCityMesh();
