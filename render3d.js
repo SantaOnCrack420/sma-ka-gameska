@@ -209,10 +209,12 @@
     const mat = new THREE.SpriteMaterial({
       map: tex,
       transparent: true,
-      depthWrite: false,   // sprite nevyrezává z budov
+      depthWrite: false,
+      depthTest: false,    // hráč VŽDY navrch (v top-down ho nesmí zakrýt barák)
     });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(1.8, 3.2, 1);  // cca 1.8 × 3.2 m (lidská postava)
+    sprite.renderOrder = 999;       // kresli po budovách
     return sprite;
   }
 
@@ -332,6 +334,14 @@
   }
 
   // ── Export ───────────────────────────────────────────────
-  window.R3D = { init, renderFrame, resize };
+  window.R3D = {
+    init, renderFrame, resize,
+    debug: () => ({
+      sprite: simmySprite ? [Math.round(simmySprite.position.x), Math.round(simmySprite.position.y), Math.round(simmySprite.position.z)] : null,
+      tex: simmySprite && simmySprite.material.map ? (simmySprite.material.map.image ? 'loaded' : 'pending') : 'none',
+      cam: camera ? [Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z)] : null,
+      sceneKids: scene ? scene.children.length : 0,
+    }),
+  };
 
 })();

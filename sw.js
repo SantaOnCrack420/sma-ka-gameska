@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v51';   // bump: 3D engine fix + nová ikona (GTA VII Těšín)
+const CACHE = 'smazak-v52';   // bump: 3D funkční (window.player fix, sprite navrch, build tag)
 const FILES = [
   './',
   './index.html',

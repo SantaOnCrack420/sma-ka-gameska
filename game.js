@@ -225,6 +225,9 @@ const player = {
   speed: 1.05,
   angle: 0,
 };
+// Vystav hráče 3D enginu (render3d.js čte window.player). `const` se sám na window
+// nenapojí, takže explicitně — bez toho kamera/sprite hráče nesledují.
+window.player = player;
 
 const cam = { x: player.wx, y: player.wy };
 let facing = 1;   // 1 = doprava, -1 = doleva
@@ -261,6 +264,7 @@ window.addEventListener('keyup', e => { keys[e.key] = false; });
 const inRect = (x, y, r) => r && x >= r.x && x <= r.x+r.w && y >= r.y && y <= r.y+r.h;
 // pohyb = levý joystick; střelba = tlačítko HOĎ (drž, auto-aim); smažák = tlačítko
 const moveJoy = { active: false, id: -1, bx: 0, by: 0, dx: 0, dy: 0 };
+window.moveJoy = moveJoy;   // pro autotest simulaci pohybu (headless)
 let aimAngle = 0;
 
 function menuButtonsHit(x, y) {
@@ -1318,3 +1322,40 @@ if (!nick) showNick();   // poprvé: vyžádej nick
 // pokus spustit hudbu hned při načtení (pokud prohlížeč povolí autoplay);
 // jinak naskočí při prvním dotyku přes listenery výše
 startMusic();
+
+// ── AUTOTEST háček (jen s ?autotest v URL — pro headless screenshot z WSL) ──
+// Sám zadá nick, spustí hru, volitelně simuluje pohyb, a sype diagnostiku do
+// #__diag divu (čte se přes chrome --dump-dom). V ostré verzi NEAKTIVNÍ.
+if (location.search.indexOf('autotest') !== -1) {
+  const _log = [];
+  const _diag = m => {
+    _log.push(String(m));
+    let el = document.getElementById('__diag');
+    if (!el) { el = document.createElement('div'); el.id = '__diag';
+      el.style.cssText = 'position:fixed;left:0;bottom:0;z-index:99999;background:#000;color:#0f0;font:10px monospace;padding:2px;max-width:100%';
+      document.body.appendChild(el); }
+    el.textContent = _log.join(' ║ ');
+  };
+  window.addEventListener('error', e => _diag('JSERR: ' + e.message + ' @' + (e.lineno||'?')));
+  ['log','warn','error'].forEach(k => { const o = console[k];
+    console[k] = (...a) => { _diag(k.toUpperCase() + ': ' + a.join(' ')); o.apply(console, a); }; });
+  window.addEventListener('load', () => setTimeout(() => {
+    try { localStorage.setItem('smazak_nick', 'TEST'); } catch (e) {}
+    try { if (typeof hideNick === 'function') hideNick(); } catch (e) {}
+    try { startGame(); _diag('startGame OK'); } catch (e) { _diag('startGame THROW: ' + e.message); }
+    try { if (window.R3D) R3D.init(); } catch (e) { _diag('R3D.init THROW: ' + e.message); }   // hned, jako na mobilu
+    setTimeout(() => {
+      _diag('VEC_BLD=' + (typeof VEC_BLD !== 'undefined' ? VEC_BLD.length : 'UNDEF'));
+      // test pohybu: zapni joystick doprava a zavolej update() 120× přímo
+      try {
+        const x0 = player.wx, y0 = player.wy;
+        moveJoy.active = true; moveJoy.id = 999; moveJoy.dx = 50; moveJoy.dy = 0;
+        for (let i = 0; i < 120; i++) { if (typeof update === 'function') update(); }
+        _diag('po 120x update=' + Math.round(player.wx) + ',' + Math.round(player.wy) + ' (z ' + Math.round(x0) + ',' + Math.round(y0) + ')');
+      } catch (e) { _diag('MOVE TEST ERR: ' + e.message); }
+      // sesynchronizuj 3D obraz na novou pozici hráče
+      try { for (let i = 0; i < 3; i++) R3D.renderFrame(); } catch (e) {}
+      if (window.R3D && R3D.debug) _diag('R3D ' + JSON.stringify(R3D.debug()));
+    }, 1200);
+  }, 600));
+}
