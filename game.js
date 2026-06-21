@@ -321,6 +321,7 @@ let score = 0, lives = 3;
 let best = +(localStorage.getItem('smazak_best') || 0);
 function saveBest() { if (score > best) { best = score; localStorage.setItem('smazak_best', best); } }
 let fries = [], pigeons = [], particles = [], npcs = [], cogani = [], bags = [], smazaks = [];
+window.npcs = npcs;   // render3d.js čte window.npcs pro pozice NPC spritů
 let shootCd = 0, pigKills = 0, coganKills = 0, bagsGot = 0;
 let hurtCd = 0;          // nezranitelnost po zásahu
 let popups = [];         // krátké hlášky na obrazovce
@@ -366,6 +367,7 @@ function startGame() {
   state = 'PLAYING';
   score = 0; lives = 3; pigKills = 0; coganKills = 0; bagsGot = 0; hurtCd = 0;
   fries = []; pigeons = []; particles = []; npcs = []; cogani = []; bags = []; smazaks = []; popups = [];
+  window.npcs = npcs;   // nový array po resetu — aktualizuj window referenci
   wave = 0; waveState = 'BREAK'; breakT = 90; boss = null; dog = null;
   bannerText = ''; bannerT = 0; perkTriple = false; perkRapid = false; smazakCd = 0;
   firing = false; fireTouch = -1;
@@ -418,11 +420,16 @@ function randWalkable(minDistFromPlayer) {
 function spawnPigeon() {
   const p = randWalkable(160); if (p) pigeons.push({ wx: p.wx, wy: p.wy, t: Math.random()*100, hp: 1 });
 }
-const ENEMY_NPC_CHANCE = 0.25;   // 25 % NPC jsou nepřátelé
+const ENEMY_NPC_CHANCE = 0.25;
+const NPC_CIVILIAN_COUNT = 11;   // indexy 0-10 v render3d NPC_DEFS (civils)
+const NPC_ENEMY_COUNT    = 4;    // indexy 11-14 v render3d NPC_DEFS (enemy walk)
 function spawnNpc() {
   const p = randWalkable(120);
   if (!p) return;
   const isEnemy = Math.random() < ENEMY_NPC_CHANCE;
+  const typeIdx = isEnemy
+    ? NPC_CIVILIAN_COUNT + Math.floor(Math.random() * NPC_ENEMY_COUNT)
+    : Math.floor(Math.random() * NPC_CIVILIAN_COUNT);
   npcs.push({
     wx: p.wx, wy: p.wy, t: Math.random()*100,
     col: NPC_COLORS[(Math.random()*NPC_COLORS.length)|0],
@@ -431,6 +438,7 @@ function spawnNpc() {
     role: isEnemy ? 'enemy' : 'npc',
     agro: false,
     hp: isEnemy ? 2 : 0,
+    typeIdx,
   });
 }
 function spawnCoganRing(hp = 2) {

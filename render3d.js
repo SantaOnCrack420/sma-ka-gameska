@@ -609,49 +609,92 @@
   }
 
   // ── NPC sprite pool (chodci + nepřátelé po ulicích) ──────
-  // frames > 1 = walk sheet (animovaný). sw/sh = metry na scéně.
+  // sh = výška v metrech (konstanta = konzistentní postava). sw = dopočítá se z aspect ratio.
+  // frames > 1 = walk sheet animovaný. family/old_dog vyřazeny (multi-postava na 1 PNG).
+  const NPC_SH = 3.3;   // stejná výška jako Šimmy
   const NPC_DEFS = [
-    { src: 'assets/npc/man_phone.png',   frames: 1, sw: 2.0, sh: 4.0 },
-    { src: 'assets/npc/tourist.png',     frames: 1, sw: 2.0, sh: 4.0 },
-    { src: 'assets/npc/cop.png',         frames: 1, sw: 2.0, sh: 4.2 },
-    { src: 'assets/npc/babka.png',       frames: 1, sw: 1.8, sh: 3.6 },
-    { src: 'assets/npc/teenager.png',    frames: 1, sw: 1.8, sh: 3.8 },
-    { src: 'assets/npc/mama.png',        frames: 1, sw: 2.0, sh: 4.0 },
-    { src: 'assets/npc/delnik.png',      frames: 1, sw: 2.0, sh: 4.0 },
-    { src: 'assets/npc/vendor.png',      frames: 1, sw: 2.0, sh: 4.0 },
-    { src: 'assets/npc/dedek.png',       frames: 1, sw: 1.8, sh: 3.6 },
-    { src: 'assets/npc/businessman.png', frames: 1, sw: 2.0, sh: 4.0 },
-    { src: 'assets/npc/jogger_f.png',    frames: 1, sw: 1.8, sh: 3.8 },
-    // Walk-cycle nepřátelé (z assets/enemy/ — animovaní)
-    { src: 'assets/enemy/opilec.png',    frames: 3, sw: 2.0, sh: 4.0 },
-    { src: 'assets/enemy/vandal.png',    frames: 8, sw: 2.0, sh: 4.0 },
-    { src: 'assets/enemy/somrak.png',    frames: 2, sw: 2.0, sh: 4.0 },
-    { src: 'assets/enemy/gauner.png',    frames: 4, sw: 2.0, sh: 4.0 },
+    // Civils (indexy 0–10, odpovídá game.js NPC_CIVILIAN_COUNT)
+    { src: 'assets/npc/man_phone.png',   frames: 1 },
+    { src: 'assets/npc/tourist.png',     frames: 1 },
+    { src: 'assets/npc/cop.png',         frames: 1 },
+    { src: 'assets/npc/babka.png',       frames: 1 },
+    { src: 'assets/npc/teenager.png',    frames: 1 },
+    { src: 'assets/npc/mama.png',        frames: 1 },
+    { src: 'assets/npc/delnik.png',      frames: 1 },
+    { src: 'assets/npc/vendor.png',      frames: 1 },
+    { src: 'assets/npc/dedek.png',       frames: 1 },
+    { src: 'assets/npc/businessman.png', frames: 1 },
+    { src: 'assets/npc/jogger_f.png',    frames: 1 },
+    // Enemies (indexy 11–14, odpovídá game.js NPC_ENEMY_COUNT)
+    { src: 'assets/enemy/opilec.png',    frames: 3 },
+    { src: 'assets/enemy/vandal.png',    frames: 8 },
+    { src: 'assets/enemy/somrak.png',    frames: 2 },
+    { src: 'assets/enemy/gauner.png',    frames: 4 },
   ];
   const MAX_NPC = 35;
 
   function buildNpcPool() {
     const loader = new THREE.TextureLoader();
-    const defCount = NPC_DEFS.length;
+    // Přednahraj všechny textury jednou (sdílená GPU textura)
+    const sharedTextures = NPC_DEFS.map(def => {
+      const tex = loadTex(loader, def.src);
+      return tex;
+    });
 
     for (let i = 0; i < MAX_NPC; i++) {
-      const def = NPC_DEFS[i % defCount];
-      const tex = loadTex(loader, def.src);
-      if (def.frames > 1) {
-        tex.repeat.set(1 / def.frames, 1);
-        tex.offset.set(0, 0);
-      }
+      const defIdx = i % NPC_DEFS.length;
+      const def = NPC_DEFS[defIdx];
+      // Per-sprite SpriteMaterial: sdílí GPU texturu ale má vlastní offset (nezávislá animace)
       const mat = new THREE.SpriteMaterial({
-        map: tex, transparent: true, depthWrite: false,
+        map: sharedTextures[defIdx],
+        transparent: true, depthWrite: false,
         depthTest: true, alphaTest: 0.1,
       });
+      if (def.frames > 1) {
+        mat.map = sharedTextures[defIdx].clone();
+        mat.map.needsUpdate = true;
+        mat.map.repeat.set(1 / def.frames, 1);
+        mat.map.offset.set(0, 0);
+      }
       const sprite = new THREE.Sprite(mat);
-      sprite.scale.set(def.sw, def.sh, 1);
+      sprite.scale.set(NPC_SH * 0.55, NPC_SH, 1);   // proporce, zpřesní se po načtení
       sprite.renderOrder = 50;
       sprite.visible = false;
-      sprite.userData = { frames: def.frames, walkOffset: i * 0.37, defIdx: i % defCount };
+      sprite.userData = {
+        frames: def.frames,
+        walkPhase: i * 0.37,   // různý fázový offset = nesynchronizovaná chůze
+        defIdx,
+      };
+      // Jakmile se textura načte, přepočítáme šířku z aspect ratio
+      const spriteRef = sprite;
+      const matRef = mat;
+      sharedTextures[defIdx].image
+        ? updateSpriteScale(spriteRef, sharedTextures[defIdx], def.frames)
+        : (sharedTextures[defIdx].addEventListener
+            ? sharedTextures[defIdx].addEventListener('update', () => updateSpriteScale(spriteRef, matRef.map, def.frames))
+            : null);
       scene.add(sprite);
       npcSpritePool.push(sprite);
+    }
+
+    // Zpožděný přepočet scale (textury se načítají async)
+    setTimeout(() => {
+      for (let i = 0; i < npcSpritePool.length; i++) {
+        const sp = npcSpritePool[i];
+        const def = NPC_DEFS[sp.userData.defIdx];
+        const tex = sp.material.map;
+        if (tex && tex.image) updateSpriteScale(sp, tex, def.frames);
+      }
+    }, 1500);
+  }
+
+  function updateSpriteScale(sprite, tex, frames) {
+    if (!tex || !tex.image) return;
+    const frameW = tex.image.width / frames;
+    const frameH = tex.image.height;
+    if (frameH > 0) {
+      const sw = NPC_SH * (frameW / frameH);
+      sprite.scale.set(sw, NPC_SH, 1);
     }
   }
 
@@ -928,25 +971,35 @@
     updatePOIVisibility();
 
     // Aktualizuj NPC sprity: pozice + walk animace
+    // Přiřaď každého NPC ke spritu správného typeIdx (ne pool-index mapping)
     const npcs = (typeof window.npcs !== 'undefined') ? window.npcs : [];
     const WALK_FPS = 6;
-    for (let i = 0; i < npcSpritePool.length; i++) {
-      const sprite = npcSpritePool[i];
-      if (i < npcs.length) {
-        const n = npcs[i];
-        const def = NPC_DEFS[sprite.userData.defIdx];
-        sprite.visible = true;
-        sprite.position.set(wx2m(n.wx), def.sh / 2, wy2m(n.wy));
-        if (sprite.userData.frames > 1) {
-          const moving = n.vx !== 0 || n.vy !== 0 || (n.dir !== undefined);
-          if (moving) {
-            const frame = Math.floor((now + sprite.userData.walkOffset) * WALK_FPS) % sprite.userData.frames;
-            sprite.material.map.offset.x = frame / sprite.userData.frames;
-            sprite.material.map.needsUpdate = true;
-          }
-        }
-      } else {
-        sprite.visible = false;
+
+    // Seskup pool podle defIdx (typ NPC)
+    const poolByType = {};
+    for (const sp of npcSpritePool) {
+      const t = sp.userData.defIdx;
+      if (!poolByType[t]) poolByType[t] = [];
+      poolByType[t].push(sp);
+    }
+    // Schovej všechny sprity, pak zobraz jen ty přiřazené
+    for (const sp of npcSpritePool) sp.visible = false;
+    const typeUsedCount = {};
+    for (const n of npcs) {
+      const typeIdx = (n.typeIdx !== undefined) ? n.typeIdx : 0;
+      const candidates = poolByType[typeIdx];
+      if (!candidates) continue;
+      const used = typeUsedCount[typeIdx] || 0;
+      if (used >= candidates.length) continue;   // pool pro tento typ vyčerpán
+      typeUsedCount[typeIdx] = used + 1;
+      const sprite = candidates[used];
+      sprite.visible = true;
+      sprite.position.set(wx2m(n.wx), NPC_SH / 2, wy2m(n.wy));
+      // Walk animace pro víceframové sprity (enemies)
+      if (sprite.userData.frames > 1) {
+        const frame = Math.floor((now + sprite.userData.walkPhase) * WALK_FPS) % sprite.userData.frames;
+        sprite.material.map.offset.x = frame / sprite.userData.frames;
+        sprite.material.map.needsUpdate = true;
       }
     }
 
