@@ -418,9 +418,20 @@ function randWalkable(minDistFromPlayer) {
 function spawnPigeon() {
   const p = randWalkable(160); if (p) pigeons.push({ wx: p.wx, wy: p.wy, t: Math.random()*100, hp: 1 });
 }
+const ENEMY_NPC_CHANCE = 0.25;   // 25 % NPC jsou nepřátelé
 function spawnNpc() {
   const p = randWalkable(120);
-  if (p) npcs.push({ wx: p.wx, wy: p.wy, t: Math.random()*100, col: NPC_COLORS[(Math.random()*NPC_COLORS.length)|0], dir: Math.random()*Math.PI*2 });
+  if (!p) return;
+  const isEnemy = Math.random() < ENEMY_NPC_CHANCE;
+  npcs.push({
+    wx: p.wx, wy: p.wy, t: Math.random()*100,
+    col: NPC_COLORS[(Math.random()*NPC_COLORS.length)|0],
+    dir: Math.random()*Math.PI*2,
+    vx: 0, vy: 0,
+    role: isEnemy ? 'enemy' : 'npc',
+    agro: false,
+    hp: isEnemy ? 2 : 0,
+  });
 }
 function spawnCoganRing(hp = 2) {
   // spawn v prstenci kolem hráče (na pochozím místě)
@@ -618,18 +629,45 @@ function update() {
   pigeons = pigeons.filter(p => p.hp > 0);
   while (pigeons.length < 8) spawnPigeon();
 
-  // --- NPC chodci (wandering po ulicích) ---
+  // --- NPC chodci + street enemies ---
+  const AGRO_DIST = 130, AGRO_SPD = 0.85, WALK_SPD = 0.5;
   for (const n of npcs) {
     n.t += 0.02;
-    if (Math.random() < 0.015) n.dir += (Math.random() - 0.5) * 0.8;
-    const nx = n.wx + Math.cos(n.dir) * 0.55;
-    const ny = n.wy + Math.sin(n.dir) * 0.55;
-    if (!isSolidAt(nx, n.wy)) n.wx = nx;
-    else { n.dir += Math.PI * 0.4; }
-    if (!isSolidAt(n.wx, ny)) n.wy = ny;
-    else { n.dir += Math.PI * 0.4; }
+    if (n.role === 'enemy') {
+      const d = wdist(n.wx, n.wy, player.wx, player.wy);
+      n.agro = d < AGRO_DIST;
+      if (n.agro) {
+        // Chase hráče
+        const dx = player.wx - n.wx, dy = player.wy - n.wy, l = Math.hypot(dx, dy) || 1;
+        n.vx = dx/l * AGRO_SPD; n.vy = dy/l * AGRO_SPD;
+        const enx = n.wx + n.vx, eny = n.wy + n.vy;
+        if (!isSolidAt(enx, n.wy)) n.wx = enx; else n.vx = 0;
+        if (!isSolidAt(n.wx, eny)) n.wy = eny; else n.vy = 0;
+        // Zásah hráče
+        if (d < 16 && hurtCd === 0 && n.hp > 0) {
+          lives--; hurtCd = 90; updateHud(); addShake(0.35);
+          sfx('hurt', 0.5); boom(player.wx, player.wy, '#ff3b3b', 8);
+          popup('👊 Dostal ses!');
+          if (lives <= 0) { gameOver(); return; }
+        }
+      } else {
+        // Wandering
+        if (Math.random() < 0.012) n.dir += (Math.random()-0.5)*0.9;
+        n.vx = Math.cos(n.dir)*WALK_SPD; n.vy = Math.sin(n.dir)*WALK_SPD;
+        const enx = n.wx + n.vx, eny = n.wy + n.vy;
+        if (!isSolidAt(enx, n.wy)) n.wx = enx; else { n.dir += Math.PI*0.35; n.vx = 0; }
+        if (!isSolidAt(n.wx, eny)) n.wy = eny; else { n.dir += Math.PI*0.35; n.vy = 0; }
+      }
+    } else {
+      // Normální chodec — wandering
+      if (Math.random() < 0.01) n.dir += (Math.random()-0.5)*0.7;
+      n.vx = Math.cos(n.dir)*WALK_SPD*0.7; n.vy = Math.sin(n.dir)*WALK_SPD*0.7;
+      const nnx = n.wx + n.vx, nny = n.wy + n.vy;
+      if (!isSolidAt(nnx, n.wy)) n.wx = nnx; else { n.dir += Math.PI*0.4; n.vx = 0; }
+      if (!isSolidAt(n.wx, nny)) n.wy = nny; else { n.dir += Math.PI*0.4; n.vy = 0; }
+    }
   }
-  while (npcs.length < 25) spawnNpc();
+  while (npcs.length < 28) spawnNpc();
 
   // --- cogani (vlny — vždy honí hráče) ---
   if (hurtCd > 0) hurtCd--;

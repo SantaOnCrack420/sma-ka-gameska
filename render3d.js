@@ -184,6 +184,9 @@
 
     const mat = new THREE.MeshLambertMaterial({
       vertexColors: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
     });
 
     return new THREE.Mesh(merged, mat);
@@ -379,11 +382,28 @@
     '-1': [2.4, 0],
   };
 
+  function buildDisc(cx, cz, radius, y) {
+    const SEG = 10;
+    const verts = [];
+    for (let i = 0; i < SEG; i++) {
+      const a1 = (i / SEG) * Math.PI * 2;
+      const a2 = ((i + 1) / SEG) * Math.PI * 2;
+      verts.push(cx, y, cz);
+      verts.push(cx + Math.cos(a1) * radius, y, cz + Math.sin(a1) * radius);
+      verts.push(cx + Math.cos(a2) * radius, y, cz + Math.sin(a2) * radius);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+    return geo;
+  }
+
   function buildRoads() {
     if (typeof VEC_ROADS === 'undefined' || VEC_ROADS.length === 0) return null;
 
     const sidewalkGeos = [];
     const asphaltGeos  = [];
+    const junctionSW   = [];
+    const junctionAS   = [];
 
     for (const a of VEC_ROADS) {
       if (!a || a.length < 5) continue;
@@ -406,6 +426,16 @@
         }
       }
 
+      // Junction discs na endpoints (zaplnění mezer křižovatek)
+      const n = coords.length;
+      const sx = coords[0], sz = coords[1], ex = coords[n-2], ez = coords[n-1];
+      if (widths[1] > 0) {
+        junctionSW.push(buildDisc(sx, sz, sidewalkHalf, 0.07));
+        junctionSW.push(buildDisc(ex, ez, sidewalkHalf, 0.07));
+      }
+      junctionAS.push(buildDisc(sx, sz, asphaltHalf, 0.09));
+      junctionAS.push(buildDisc(ex, ez, asphaltHalf, 0.09));
+
       // Asfalt (užší)
       const asphaltColor = (parseInt(code) < 0) ? 0x9a9286 : 0x454552;
       const geoAS = buildRibbon(coords, asphaltHalf);
@@ -424,9 +454,10 @@
 
     const group = new THREE.Group();
 
-    // Chodníky
+    // Chodníky (ribbon + junction discs)
     if (sidewalkGeos.length > 0) {
-      const merged = mergeFlat(sidewalkGeos);
+      const allSW = sidewalkGeos.concat(junctionSW.filter(Boolean));
+      const merged = mergeFlat(allSW);
       if (merged) {
         merged.computeVertexNormals();
         const mat = new THREE.MeshLambertMaterial({ color: 0xb9b3a6 });
@@ -434,12 +465,13 @@
       }
     }
 
-    // Asfalt — hlavní silnice (kód >= 0)
+    // Asfalt — hlavní silnice (kód >= 0) + junction discs
     const mainGeos = asphaltGeos.filter(g => !g._altColor);
     const altGeos  = asphaltGeos.filter(g => g._altColor);
+    const mainJunc = junctionAS.filter(Boolean);
 
     if (mainGeos.length > 0) {
-      const merged = mergeFlat(mainGeos);
+      const merged = mergeFlat(mainGeos.concat(mainJunc));
       if (merged) {
         merged.computeVertexNormals();
         const mat = new THREE.MeshLambertMaterial({ color: 0x454552 });
@@ -509,11 +541,12 @@
       map: tex,
       transparent: true,
       depthWrite: false,
-      depthTest: false,    // hráč VŽDY navrch (v top-down ho nesmí zakrýt barák)
+      depthTest: true,     // schová se za budovami které jsou fyzicky před ním
+      alphaTest: 0.05,     // odstraní šedé okraje z průhledné textury
     });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(1.6, 3.3, 1);  // poměr snímku 204:421 ≈ lidská postava
-    sprite.renderOrder = 999;       // kresli po budovách
+    sprite.renderOrder = 100;
     return sprite;
   }
   // Přepínání snímků chůze (volá renderFrame): jde → cyklus, stojí → klid. snímek
@@ -535,7 +568,10 @@
     return tex;
   }
   function addBillboard(group, tex, x, y, z, sw, sh, order) {
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+    const mat = new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      depthTest: true, alphaTest: 0.1,
+    });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(sw, sh, 1);
     sprite.position.set(x, y, z);
@@ -572,23 +608,48 @@
     return group;
   }
 
-  // ── NPC sprite pool (chodci po ulicích) ──────────────────
-  const NPC_TYPES = ['man_phone','tourist','cop','babka','teenager','mama','delnik',
-                     'vendor','dedek','businessman','jogger_f','family','old_dog'];
-  const MAX_NPC = 30;
+  // ── NPC sprite pool (chodci + nepřátelé po ulicích) ──────
+  // frames > 1 = walk sheet (animovaný). sw/sh = metry na scéně.
+  const NPC_DEFS = [
+    { src: 'assets/npc/man_phone.png',   frames: 1, sw: 2.0, sh: 4.0 },
+    { src: 'assets/npc/tourist.png',     frames: 1, sw: 2.0, sh: 4.0 },
+    { src: 'assets/npc/cop.png',         frames: 1, sw: 2.0, sh: 4.2 },
+    { src: 'assets/npc/babka.png',       frames: 1, sw: 1.8, sh: 3.6 },
+    { src: 'assets/npc/teenager.png',    frames: 1, sw: 1.8, sh: 3.8 },
+    { src: 'assets/npc/mama.png',        frames: 1, sw: 2.0, sh: 4.0 },
+    { src: 'assets/npc/delnik.png',      frames: 1, sw: 2.0, sh: 4.0 },
+    { src: 'assets/npc/vendor.png',      frames: 1, sw: 2.0, sh: 4.0 },
+    { src: 'assets/npc/dedek.png',       frames: 1, sw: 1.8, sh: 3.6 },
+    { src: 'assets/npc/businessman.png', frames: 1, sw: 2.0, sh: 4.0 },
+    { src: 'assets/npc/jogger_f.png',    frames: 1, sw: 1.8, sh: 3.8 },
+    // Walk-cycle nepřátelé (z assets/enemy/ — animovaní)
+    { src: 'assets/enemy/opilec.png',    frames: 3, sw: 2.0, sh: 4.0 },
+    { src: 'assets/enemy/vandal.png',    frames: 8, sw: 2.0, sh: 4.0 },
+    { src: 'assets/enemy/somrak.png',    frames: 2, sw: 2.0, sh: 4.0 },
+    { src: 'assets/enemy/gauner.png',    frames: 4, sw: 2.0, sh: 4.0 },
+  ];
+  const MAX_NPC = 35;
 
   function buildNpcPool() {
     const loader = new THREE.TextureLoader();
-    const textures = {};
-    NPC_TYPES.forEach(t => { textures[t] = loadTex(loader, `assets/npc/${t}.png`); });
+    const defCount = NPC_DEFS.length;
 
     for (let i = 0; i < MAX_NPC; i++) {
-      const type = NPC_TYPES[i % NPC_TYPES.length];
-      const mat = new THREE.SpriteMaterial({ map: textures[type], transparent: true, depthWrite: false });
+      const def = NPC_DEFS[i % defCount];
+      const tex = loadTex(loader, def.src);
+      if (def.frames > 1) {
+        tex.repeat.set(1 / def.frames, 1);
+        tex.offset.set(0, 0);
+      }
+      const mat = new THREE.SpriteMaterial({
+        map: tex, transparent: true, depthWrite: false,
+        depthTest: true, alphaTest: 0.1,
+      });
       const sprite = new THREE.Sprite(mat);
-      sprite.scale.set(1.4, 2.8, 1);
+      sprite.scale.set(def.sw, def.sh, 1);
       sprite.renderOrder = 50;
       sprite.visible = false;
+      sprite.userData = { frames: def.frames, walkOffset: i * 0.37, defIdx: i % defCount };
       scene.add(sprite);
       npcSpritePool.push(sprite);
     }
@@ -866,15 +927,26 @@
     // Aktualizuj viditelnost POI názvů
     updatePOIVisibility();
 
-    // Aktualizuj pozice NPC spritů z window.npcs[]
+    // Aktualizuj NPC sprity: pozice + walk animace
     const npcs = (typeof window.npcs !== 'undefined') ? window.npcs : [];
+    const WALK_FPS = 6;
     for (let i = 0; i < npcSpritePool.length; i++) {
+      const sprite = npcSpritePool[i];
       if (i < npcs.length) {
         const n = npcs[i];
-        npcSpritePool[i].visible = true;
-        npcSpritePool[i].position.set(wx2m(n.wx), 1.4, wy2m(n.wy));
+        const def = NPC_DEFS[sprite.userData.defIdx];
+        sprite.visible = true;
+        sprite.position.set(wx2m(n.wx), def.sh / 2, wy2m(n.wy));
+        if (sprite.userData.frames > 1) {
+          const moving = n.vx !== 0 || n.vy !== 0 || (n.dir !== undefined);
+          if (moving) {
+            const frame = Math.floor((now + sprite.userData.walkOffset) * WALK_FPS) % sprite.userData.frames;
+            sprite.material.map.offset.x = frame / sprite.userData.frames;
+            sprite.material.map.needsUpdate = true;
+          }
+        }
       } else {
-        npcSpritePool[i].visible = false;
+        sprite.visible = false;
       }
     }
 
