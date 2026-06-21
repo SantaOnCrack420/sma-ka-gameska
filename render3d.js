@@ -19,6 +19,8 @@
   // ── Stav renderer ───────────────────────────────────────
   let renderer, scene, camera, simmySprite;
   let initialized = false;
+  let propsGroup = null;
+  let npcSpritePool = [];
 
   // ── Palette pro budovy ──────────────────────────────────
   // Koherentní paleta — mírně variace podle pater a indexu budovy,
@@ -525,6 +527,73 @@
     }
   }
 
+  // ── Pomocné funkce pro billboard sprity ─────────────────
+  function loadTex(loader, src) {
+    const tex = loader.load(src, undefined, undefined, () => {});
+    tex.minFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    return tex;
+  }
+  function addBillboard(group, tex, x, y, z, sw, sh, order) {
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(sw, sh, 1);
+    sprite.position.set(x, y, z);
+    sprite.renderOrder = order || 5;
+    group.add(sprite);
+    return sprite;
+  }
+
+  // ── World Props (stromy, keře, lampy u POI a po ulicích) ─
+  function buildWorldProps() {
+    const group = new THREE.Group();
+    const loader = new THREE.TextureLoader();
+    const texStrom   = loadTex(loader, 'assets/props/strom.png');
+    const texKer     = loadTex(loader, 'assets/props/ker.png');
+    const texLampa   = loadTex(loader, 'assets/props/lampa.png');
+    const texLavicka = loadTex(loader, 'assets/props/lavicka.png');
+
+    if (typeof POI !== 'undefined') {
+      for (let i = 0; i < POI.length; i++) {
+        const [, wx, wy] = POI[i];
+        const x = wx2m(wx), z = wy2m(wy);
+        const side = (i % 2 === 0) ? 1 : -1;
+
+        // Strom naproti obchodu (větší)
+        addBillboard(group, texStrom, x - side * 5, 3.5, z + 2, 3.5, 7);
+        // Keř vedle obchodu
+        addBillboard(group, texKer, x + side * 4.5, 1.25, z - 1, 2.5, 2.5);
+        // Lampa před obchodem (každý druhý)
+        if (i % 2 === 0) addBillboard(group, texLampa, x + 2, 2.5, z - 5, 1.2, 5);
+        // Lavička (každý třetí)
+        if (i % 3 === 0) addBillboard(group, texLavicka, x - 3, 0.75, z + 4, 3, 1.5);
+      }
+    }
+    return group;
+  }
+
+  // ── NPC sprite pool (chodci po ulicích) ──────────────────
+  const NPC_TYPES = ['man_phone','tourist','cop','babka','teenager','mama','delnik',
+                     'vendor','dedek','businessman','jogger_f','family','old_dog'];
+  const MAX_NPC = 30;
+
+  function buildNpcPool() {
+    const loader = new THREE.TextureLoader();
+    const textures = {};
+    NPC_TYPES.forEach(t => { textures[t] = loadTex(loader, `assets/npc/${t}.png`); });
+
+    for (let i = 0; i < MAX_NPC; i++) {
+      const type = NPC_TYPES[i % NPC_TYPES.length];
+      const mat = new THREE.SpriteMaterial({ map: textures[type], transparent: true, depthWrite: false });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(1.4, 2.8, 1);
+      sprite.renderOrder = 50;
+      sprite.visible = false;
+      scene.add(sprite);
+      npcSpritePool.push(sprite);
+    }
+  }
+
   // ── POI billboardy (obchody/podniky) ────────────────────
   const POI_ICON_3D = {
     VECERKA:'🏪', KAUFLAND:'🛒', ALKOHOL:'🍾', STANEK:'🍫', TRAFIKA:'🚬',
@@ -731,6 +800,13 @@
     poiGroup = buildPOI();
     if (poiGroup) scene.add(poiGroup);
 
+    // World props (stromy, keře, lampy, lavičky)
+    propsGroup = buildWorldProps();
+    scene.add(propsGroup);
+
+    // NPC sprite pool (chodci)
+    buildNpcPool();
+
     // Šimmy billboard
     simmySprite = buildSimmySprite();
     simmySprite.position.set(
@@ -789,6 +865,18 @@
 
     // Aktualizuj viditelnost POI názvů
     updatePOIVisibility();
+
+    // Aktualizuj pozice NPC spritů z window.npcs[]
+    const npcs = (typeof window.npcs !== 'undefined') ? window.npcs : [];
+    for (let i = 0; i < npcSpritePool.length; i++) {
+      if (i < npcs.length) {
+        const n = npcs[i];
+        npcSpritePool[i].visible = true;
+        npcSpritePool[i].position.set(wx2m(n.wx), 1.4, wy2m(n.wy));
+      } else {
+        npcSpritePool[i].visible = false;
+      }
+    }
 
     renderer.render(scene, camera);
   }

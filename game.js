@@ -372,7 +372,8 @@ function startGame() {
   player.wx = SPAWN_WX; player.wy = SPAWN_WY;
   player.vx = 0; player.vy = 0; player.boostT = 0;
   updateCam();
-  if (COMBAT) { for (let i = 0; i < 5; i++) spawnBag(); }   // párno po městě; cigáni přijdou ve vlnách
+  if (COMBAT) { for (let i = 0; i < 5; i++) spawnBag(); }
+  for (let i = 0; i < 20; i++) spawnNpc();   // chodci po ulicích
   showHud(true);
   updateHud();
   setMusicVol();   // ztlum hudbu na 50 %
@@ -616,6 +617,19 @@ function update() {
   }
   pigeons = pigeons.filter(p => p.hp > 0);
   while (pigeons.length < 8) spawnPigeon();
+
+  // --- NPC chodci (wandering po ulicích) ---
+  for (const n of npcs) {
+    n.t += 0.02;
+    if (Math.random() < 0.015) n.dir += (Math.random() - 0.5) * 0.8;
+    const nx = n.wx + Math.cos(n.dir) * 0.55;
+    const ny = n.wy + Math.sin(n.dir) * 0.55;
+    if (!isSolidAt(nx, n.wy)) n.wx = nx;
+    else { n.dir += Math.PI * 0.4; }
+    if (!isSolidAt(n.wx, ny)) n.wy = ny;
+    else { n.dir += Math.PI * 0.4; }
+  }
+  while (npcs.length < 25) spawnNpc();
 
   // --- cogani (vlny — vždy honí hráče) ---
   if (hurtCd > 0) hurtCd--;
