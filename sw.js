@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v56';   // bump: 3D funkční (window.player fix, sprite navrch, build tag)
+const CACHE = 'smazak-v57';   // bump: vizuální úklid A–E (NPC scale onLoad, pestřejší budovy, stíny, props, UI sjednocení)
 const FILES = [
   './',
   './index.html',

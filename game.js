@@ -224,15 +224,39 @@ const player = {
   vx: 0, vy: 0,
   speed: 1.05,
   angle: 0,
+  boostT: 0,    // inicializace — jinak undefined do prvního startGame
 };
 // Vystav hráče 3D enginu (render3d.js čte window.player). `const` se sám na window
 // nenapojí, takže explicitně — bez toho kamera/sprite hráče nesledují.
 window.player = player;
+// Vystav kolizní test pro render3d.js buildWorldProps (kontrola průchodnosti propů)
+window.isSolidAt = isSolidAt;
 
 const cam = { x: player.wx, y: player.wy };
 let facing = 1;   // 1 = doprava, -1 = doleva
 
 const clamp = (v, lo, hi) => v < lo ? lo : (v > hi ? hi : v);
+
+// Pohyb s klouzáním (sliding): zkus diagonálně, jinak rozpadni na osy.
+// radius > 0 = testuj 4 body kolem entity (poloměr v světových px).
+function tryMove(entity, dvx, dvy, radius) {
+  const r = radius || 0;
+  const nx = entity.wx + dvx, ny = entity.wy + dvy;
+  const hitsAll = r > 0
+    ? (isSolidAt(nx+r,ny)||isSolidAt(nx-r,ny)||isSolidAt(nx,ny+r)||isSolidAt(nx,ny-r))
+    : isSolidAt(nx, ny);
+  if (!hitsAll) { entity.wx = nx; entity.wy = ny; return; }
+  // Klouzání po X ose
+  const hitsX = r > 0
+    ? (isSolidAt(nx+r,entity.wy)||isSolidAt(nx-r,entity.wy)||isSolidAt(nx,entity.wy+r)||isSolidAt(nx,entity.wy-r))
+    : isSolidAt(nx, entity.wy);
+  if (!hitsX) entity.wx = nx;
+  // Klouzání po Y ose
+  const hitsY = r > 0
+    ? (isSolidAt(entity.wx+r,ny)||isSolidAt(entity.wx-r,ny)||isSolidAt(entity.wx,ny+r)||isSolidAt(entity.wx,ny-r))
+    : isSolidAt(entity.wx, ny);
+  if (!hitsY) entity.wy = ny;
+}
 // kamera se drží v hranicích mapy (na kraji se zastaví), ale když je
 // obrazovka větší než svět, vystředí se.
 function updateCam() {
@@ -587,24 +611,9 @@ function update() {
     player.vy = 0;
   }
 
-  // Kolize s poloměrem hráče (ne bodová) — testuj 4 body kolem hráče
+  // Kolize s poloměrem hráče (ne bodová) — sliding helper = plynulejší pohyb v rozích
   const PR = 10;   // poloměr hráče v svět-px
-  let nx = player.wx + player.vx;
-  // Test předního boku (kolmo na pohyb)
-  const solidX =
-    isSolidAt(nx + PR, player.wy) ||
-    isSolidAt(nx - PR, player.wy) ||
-    isSolidAt(nx, player.wy + PR) ||
-    isSolidAt(nx, player.wy - PR);
-  if (!solidX) player.wx = nx;
-
-  let ny = player.wy + player.vy;
-  const solidY =
-    isSolidAt(player.wx + PR, ny) ||
-    isSolidAt(player.wx - PR, ny) ||
-    isSolidAt(player.wx, ny + PR) ||
-    isSolidAt(player.wx, ny - PR);
-  if (!solidY) player.wy = ny;
+  tryMove(player, player.vx, player.vy, PR);
 
   updateCam();
 
@@ -1153,7 +1162,7 @@ function drawJoystick() {
   drawStick(moveJoy, '#ffffff');   // pohyb (levý palec)
 }
 
-function gtaText(text, x, y, size, fill = '#ffd700', stroke = '#000', sw = 6) {
+function gtaText(text, x, y, size, fill = '#ffd23f', stroke = '#000', sw = 6) {
   ctx.font = `bold ${size}px Oswald, Impact, "Arial Black", sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.lineWidth = sw; ctx.strokeStyle = stroke; ctx.strokeText(text, x, y);
@@ -1291,10 +1300,19 @@ function drawGameOver() {
     yy += Math.min(VW*0.06, 24);
   }
 
-  gtaText(`SKÓRE: ${score}`, VW/2, yy + 28, 32, '#ffd700');
+  // Panel box (tmavý + zlatý rámeček) — stejná "značka" jako nick/nastavení dialog
+  const lb = loadLB().slice(0, 5);
+  const panelW = Math.min(VW * 0.85, 380);
+  const panelX = (VW - panelW) / 2;
+  const panelH = VH - yy - 60;
+  ctx.fillStyle = 'rgba(22,22,31,0.88)';
+  ctx.beginPath(); ctx.roundRect(panelX, yy + 10, panelW, Math.max(80, panelH), 16); ctx.fill();
+  ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.roundRect(panelX, yy + 10, panelW, Math.max(80, panelH), 16); ctx.stroke();
+
+  gtaText(`SKÓRE: ${score}`, VW/2, yy + 28, 32, '#ffd23f');
 
   // --- LEADERBOARD (TOP 5) ---
-  const lb = loadLB().slice(0, 5);
   let ly = yy + 64;
   ctx.font = 'bold 16px Oswald, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.lineWidth = 3; ctx.strokeStyle = '#000';

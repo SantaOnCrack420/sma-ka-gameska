@@ -6,6 +6,10 @@
 'use strict';
 
 (function () {
+  // ── Perf přepínač ───────────────────────────────────────
+  // false = vypni stíny na slabém mobilu (jinak vše drží)
+  const ENABLE_SHADOWS = true;
+
   // ── Konstanty ze světa ───────────────────────────────────
   const PXM = 3.6;          // px / metr (MAP_PXM z mapdata.js)
   const FLOOR_Y = 0;        // podlaha na y=0
@@ -17,41 +21,33 @@
   function wy2m(wy) { return wy / PXM; }
 
   // ── Stav renderer ───────────────────────────────────────
-  let renderer, scene, camera, simmySprite;
+  let renderer, scene, camera, simmySprite, sun;
   let initialized = false;
   let propsGroup = null;
   let npcSpritePool = [];
 
   // ── Palette pro budovy ──────────────────────────────────
-  // Koherentní paleta — mírně variace podle pater a indexu budovy,
-  // NE náhodný hash. Sedm základních tónů šedohnědé zástavby.
+  // 12 tónů šedohnědé/cihlové zástavby — stabilní hash z indexu budovy,
+  // takže sousední domy mají různé barvy ale barevný vzorek je deterministický.
   const WALL_PALETTE = [
-    0x9a8070, // patra 1 — světlá cihlová
-    0x8a7060, // patra 2
-    0x7a6458, // patra 3
-    0x9c8c78, // patra 4 — béžová
-    0x6e6050, // patra 5+
-    0x88796a,
-    0xa09080,
+    0x9a8070, 0x8a7060, 0x7a6458, 0x9c8c78,
+    0x6e6050, 0x88796a, 0xa09080, 0xb09888,
+    0x7c6a58, 0x948070, 0x6a5c50, 0x8e8070,
   ];
   const ROOF_PALETTE = [
-    0xc07855,
-    0xb06848,
-    0xa05840,
-    0xb89065,
-    0x905040,
-    0xa07860,
-    0xc09870,
+    0xc07855, 0xb06848, 0xa05840, 0xb89065,
+    0x905040, 0xa07860, 0xc09870, 0xd0a880,
+    0x985048, 0xb88860, 0x8a4c38, 0xc8a870,
   ];
 
+  // Stabilní hash (Knuth multiplicative hashing) — sousedé se neopakují
   function wallColor(floors, idx) {
-    const fi = Math.min(floors, 5) - 1;
-    // jemná variace dle indexu budovy — posun v paletě o 1-2 kroky
-    return WALL_PALETTE[(fi + (idx % 3)) % WALL_PALETTE.length];
+    const h = Math.imul(idx, 2654435761) >>> 0;
+    return WALL_PALETTE[h % WALL_PALETTE.length];
   }
   function roofColor(floors, idx) {
-    const fi = Math.min(floors, 5) - 1;
-    return ROOF_PALETTE[(fi + (idx % 3)) % ROOF_PALETTE.length];
+    const h = Math.imul(idx, 2654435761) >>> 0;
+    return ROOF_PALETTE[h % ROOF_PALETTE.length];
   }
 
   // ── Budova → ExtrudeGeometry ────────────────────────────
@@ -189,7 +185,9 @@
       polygonOffsetUnits: -2,
     });
 
-    return new THREE.Mesh(merged, mat);
+    const mesh = new THREE.Mesh(merged, mat);
+    if (ENABLE_SHADOWS) { mesh.castShadow = true; mesh.receiveShadow = true; }
+    return mesh;
   }
 
   // ── Podlaha ──────────────────────────────────────────────
@@ -199,6 +197,7 @@
     const mat = new THREE.MeshLambertMaterial({ color: 0x6f9b54 });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(FLOOR_W / 2, FLOOR_Y, FLOOR_H / 2);
+    if (ENABLE_SHADOWS) mesh.receiveShadow = true;
     return mesh;
   }
 
@@ -383,7 +382,7 @@
   };
 
   function buildDisc(cx, cz, radius, y) {
-    const SEG = 10;
+    const SEG = 24;   // bylo 10 — hladší kruhy na křižovatkách
     const verts = [];
     for (let i = 0; i < SEG; i++) {
       const a1 = (i / SEG) * Math.PI * 2;
@@ -526,8 +525,27 @@
   let walkTex = null, walkFrame = 0, walkAcc = 0;
   function buildSimmySprite() {
     const loader = new THREE.TextureLoader();
+    // SpriteMaterial vždy čelí kameře — billboard zdarma
+    const mat = new THREE.SpriteMaterial({
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,     // schová se za budovami které jsou fyzicky před ním
+      alphaTest: 0.05,     // odstraní šedé okraje z průhledné textury
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(1.6, 3.3, 1);   // proxy; onLoad přepočítá z aspect ratio framu
+    sprite.renderOrder = 100;
+
     const tex = loader.load('assets/simmy_walk.png',
-      () => {},
+      (t) => {
+        // onLoad: přepočítej šířku z aspect ratio jednoho walk framu
+        const frameW = t.image.width / WALK_N;
+        const frameH = t.image.height;
+        if (frameH > 0) {
+          const sh = 3.3;
+          sprite.scale.set(sh * (frameW / frameH), sh, 1);
+        }
+      },
       undefined,
       (err) => { console.warn('[R3D] simmy_walk.png načítání selhalo:', err); }
     );
@@ -536,17 +554,7 @@
     tex.repeat.set(1 / WALK_N, 1);        // ukaž jen jeden snímek
     tex.offset.set(0, 0);
     walkTex = tex;
-    // SpriteMaterial vždy čelí kameře — billboard zdarma
-    const mat = new THREE.SpriteMaterial({
-      map: tex,
-      transparent: true,
-      depthWrite: false,
-      depthTest: true,     // schová se za budovami které jsou fyzicky před ním
-      alphaTest: 0.05,     // odstraní šedé okraje z průhledné textury
-    });
-    const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(1.6, 3.3, 1);  // poměr snímku 204:421 ≈ lidská postava
-    sprite.renderOrder = 100;
+    mat.map = tex;
     return sprite;
   }
   // Přepínání snímků chůze (volá renderFrame): jde → cyklus, stojí → klid. snímek
@@ -561,8 +569,8 @@
   }
 
   // ── Pomocné funkce pro billboard sprity ─────────────────
-  function loadTex(loader, src) {
-    const tex = loader.load(src, undefined, undefined, () => {});
+  function loadTex(loader, src, onLoad) {
+    const tex = loader.load(src, onLoad || undefined, undefined, () => {});
     tex.minFilter = THREE.LinearFilter;
     tex.generateMipmaps = false;
     return tex;
@@ -589,20 +597,55 @@
     const texLampa   = loadTex(loader, 'assets/props/lampa.png');
     const texLavicka = loadTex(loader, 'assets/props/lavicka.png');
 
+    // Deterministický pseudo-random ze seedu (stejný výsledek každý run)
+    function seededR(seed) {
+      const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+      return x - Math.floor(x);
+    }
+    // Kontrola průchodnosti: metry → svět-px → COL grid
+    function canPlace(xm, zm) {
+      if (typeof window.isSolidAt !== 'function') return true;
+      return !window.isSolidAt(xm * PXM, zm * PXM);
+    }
+
     if (typeof POI !== 'undefined') {
       for (let i = 0; i < POI.length; i++) {
         const [, wx, wy] = POI[i];
         const x = wx2m(wx), z = wy2m(wy);
-        const side = (i % 2 === 0) ? 1 : -1;
+        // 5 nezávislých seeded hodnot pro jitter, stranu a scale
+        const r0 = seededR(i * 7 + 0);
+        const r1 = seededR(i * 7 + 1);
+        const r2 = seededR(i * 7 + 2);
+        const r3 = seededR(i * 7 + 3);
+        const r4 = seededR(i * 7 + 4);
+        const side   = r0 < 0.5 ? 1 : -1;
+        const jx     = (r1 - 0.5) * 2.5;   // ±1.25 m jitter X
+        const jz     = (r2 - 0.5) * 2.5;   // ±1.25 m jitter Z
+        const scVar  = 0.85 + r4 * 0.30;   // scale variace ±15 %
 
-        // Strom naproti obchodu (větší)
-        addBillboard(group, texStrom, x - side * 5, 3.5, z + 2, 3.5, 7);
+        // Strom naproti obchodu
+        const tx = x - side * 5 + jx, tz = z + 2 + jz;
+        if (canPlace(tx, tz))
+          addBillboard(group, texStrom, tx, 3.5 * scVar, tz, 3.5 * scVar, 7 * scVar);
+
         // Keř vedle obchodu
-        addBillboard(group, texKer, x + side * 4.5, 1.25, z - 1, 2.5, 2.5);
-        // Lampa před obchodem (každý druhý)
-        if (i % 2 === 0) addBillboard(group, texLampa, x + 2, 2.5, z - 5, 1.2, 5);
-        // Lavička (každý třetí)
-        if (i % 3 === 0) addBillboard(group, texLavicka, x - 3, 0.75, z + 4, 3, 1.5);
+        const kx = x + side * 4.5 + jx * 0.5, kz = z - 1 + jz * 0.5;
+        if (canPlace(kx, kz))
+          addBillboard(group, texKer, kx, 1.25 * scVar, kz, 2.5 * scVar, 2.5 * scVar);
+
+        // Lampa: seeded místo i%2 (60 % POI dostane lampu)
+        if (r3 < 0.6) {
+          const lx = x + 2 + jx * 0.3, lz = z - 5 + jz * 0.3;
+          if (canPlace(lx, lz))
+            addBillboard(group, texLampa, lx, 2.5, lz, 1.2, 5);
+        }
+
+        // Lavička: seeded místo i%3 (~40 % POI)
+        if (r3 >= 0.6) {
+          const bx = x - 3 + jx * 0.5, bz = z + 4 + jz * 0.5;
+          if (canPlace(bx, bz))
+            addBillboard(group, texLavicka, bx, 0.75, bz, 3 * scVar, 1.5 * scVar);
+        }
       }
     }
     return group;
@@ -611,23 +654,23 @@
   // ── NPC sprite pool (chodci + nepřátelé po ulicích) ──────
   // sh = výška v metrech (konstanta = konzistentní postava). sw = dopočítá se z aspect ratio.
   // frames > 1 = walk sheet animovaný. family/old_dog vyřazeny (multi-postava na 1 PNG).
-  const NPC_SH = 3.3;   // stejná výška jako Šimmy
+  const NPC_SH = 3.3;   // základní výška — hMul per-typ ji mírně mění
   const NPC_DEFS = [
     // Civils (indexy 0–10, odpovídá game.js NPC_CIVILIAN_COUNT)
     { src: 'assets/npc/man_phone.png',   frames: 1 },
     { src: 'assets/npc/tourist.png',     frames: 1 },
     { src: 'assets/npc/cop.png',         frames: 1 },
-    { src: 'assets/npc/babka.png',       frames: 1 },
-    { src: 'assets/npc/teenager.png',    frames: 1 },
+    { src: 'assets/npc/babka.png',       frames: 1, hMul: 0.88 },   // babka menší
+    { src: 'assets/npc/teenager.png',    frames: 1, hMul: 0.93 },   // teenager menší
     { src: 'assets/npc/mama.png',        frames: 1 },
-    { src: 'assets/npc/delnik.png',      frames: 1 },
+    { src: 'assets/npc/delnik.png',      frames: 1, hMul: 1.05 },   // dělník větší
     { src: 'assets/npc/vendor.png',      frames: 1 },
-    { src: 'assets/npc/dedek.png',       frames: 1 },
+    { src: 'assets/npc/dedek.png',       frames: 1, hMul: 0.88 },   // dedek menší
     { src: 'assets/npc/businessman.png', frames: 1 },
-    { src: 'assets/npc/jogger_f.png',    frames: 1 },
+    { src: 'assets/npc/jogger_f.png',    frames: 1, hMul: 0.95 },
     // Enemies (indexy 11–14, odpovídá game.js NPC_ENEMY_COUNT)
-    { src: 'assets/enemy/opilec.png',    frames: 3 },
-    { src: 'assets/enemy/vandal.png',    frames: 8 },
+    { src: 'assets/enemy/opilec.png',    frames: 3, hMul: 1.02 },
+    { src: 'assets/enemy/vandal.png',    frames: 8, hMul: 1.05 },
     { src: 'assets/enemy/somrak.png',    frames: 2 },
     { src: 'assets/enemy/gauner.png',    frames: 4 },
   ];
@@ -635,59 +678,57 @@
 
   function buildNpcPool() {
     const loader = new THREE.TextureLoader();
-    // Přednahraj všechny textury jednou (sdílená GPU textura)
-    const sharedTextures = NPC_DEFS.map(def => {
-      const tex = loadTex(loader, def.src);
-      return tex;
-    });
 
+    // 1. Vytvoř sprity (bez textury zatím) — budou zviditelněny až po načtení
     for (let i = 0; i < MAX_NPC; i++) {
       const defIdx = i % NPC_DEFS.length;
       const def = NPC_DEFS[defIdx];
-      // Per-sprite SpriteMaterial: sdílí GPU texturu ale má vlastní offset (nezávislá animace)
       const mat = new THREE.SpriteMaterial({
-        map: sharedTextures[defIdx],
         transparent: true, depthWrite: false,
         depthTest: true, alphaTest: 0.1,
       });
-      if (def.frames > 1) {
-        mat.map = sharedTextures[defIdx].clone();
-        mat.map.needsUpdate = true;
-        mat.map.repeat.set(1 / def.frames, 1);
-        mat.map.offset.set(0, 0);
-      }
       const sprite = new THREE.Sprite(mat);
-      sprite.scale.set(NPC_SH * 0.55, NPC_SH, 1);   // proporce, zpřesní se po načtení
+      sprite.scale.set(NPC_SH * 0.55, NPC_SH, 1);   // proxy do načtení textury
       sprite.renderOrder = 50;
       sprite.visible = false;
       sprite.userData = {
         frames: def.frames,
         walkPhase: i * 0.37,   // různý fázový offset = nesynchronizovaná chůze
         defIdx,
+        scaled: false,   // true až po onLoad — zabrání zobrazení s proxy poměrem
       };
-      // Jakmile se textura načte, přepočítáme šířku z aspect ratio
-      const spriteRef = sprite;
-      const matRef = mat;
-      sharedTextures[defIdx].image
-        ? updateSpriteScale(spriteRef, sharedTextures[defIdx], def.frames)
-        : (sharedTextures[defIdx].addEventListener
-            ? sharedTextures[defIdx].addEventListener('update', () => updateSpriteScale(spriteRef, matRef.map, def.frames))
-            : null);
       scene.add(sprite);
       npcSpritePool.push(sprite);
     }
 
-    // Zpožděný přepočet scale (textury se načítají async)
-    setTimeout(() => {
-      for (let i = 0; i < npcSpritePool.length; i++) {
-        const sp = npcSpritePool[i];
-        const def = NPC_DEFS[sp.userData.defIdx];
-        const tex = sp.material.map;
-        if (tex && tex.image) updateSpriteScale(sp, tex, def.frames);
-      }
-    }, 1500);
+    // 2. Načti textury per-typ; onLoad okamžitě přiřadí mapu + přepočítá scale
+    NPC_DEFS.forEach((def, defIdx) => {
+      loadTex(loader, def.src, (tex) => {
+        const frameW = tex.image.width / def.frames;
+        const frameH = tex.image.height;
+        if (frameH <= 0) return;
+        const sh = NPC_SH * (def.hMul || 1);
+        const sw = sh * (frameW / frameH);
+        for (const sp of npcSpritePool) {
+          if (sp.userData.defIdx !== defIdx) continue;
+          // víceframové sprity potřebují klonovanou texturu (nezávislý offset.x na animaci)
+          const map = (def.frames > 1) ? tex.clone() : tex;
+          if (def.frames > 1) {
+            map.repeat.set(1 / def.frames, 1);
+            map.offset.set(0, 0);
+            map.needsUpdate = true;
+          }
+          sp.material.map = map;
+          sp.material.needsUpdate = true;
+          sp.scale.set(sw, sh, 1);
+          sp.userData.scaled = true;
+          sp.userData.sh = sh;   // uloží se pro Y pozici v renderFrame
+        }
+      });
+    });
   }
 
+  // Ponecháváme funkci pro Šimmyho a případné budoucí použití
   function updateSpriteScale(sprite, tex, frames) {
     if (!tex || !tex.image) return;
     const frameW = tex.image.width / frames;
@@ -695,6 +736,8 @@
     if (frameH > 0) {
       const sw = NPC_SH * (frameW / frameH);
       sprite.scale.set(sw, NPC_SH, 1);
+      sprite.userData.scaled = true;
+      sprite.userData.sh = NPC_SH;
     }
   }
 
@@ -842,13 +885,26 @@
   // ── Světla ───────────────────────────────────────────────
   function setupLights(scene) {
     // Slunce pod úhlem (GTA denní světlo)
-    const sun = new THREE.DirectionalLight(0xfff8e0, 0.9);
-    sun.position.set(0.6, 1.0, 0.4);  // směr ze SZ dolů
-    sun.castShadow = false;             // bez realtime stínů (perf)
+    sun = new THREE.DirectionalLight(0xfff8e0, 0.9);
+    sun.position.set(0.6, 1.0, 0.4);   // směr ze SZ dolů (přepíše se v _updateCamera)
+    if (ENABLE_SHADOWS) {
+      sun.castShadow = true;
+      sun.shadow.mapSize.width  = 1024;
+      sun.shadow.mapSize.height = 1024;
+      sun.shadow.camera.near   = 0.5;
+      sun.shadow.camera.far    = 500;
+      // Úzký frustum kolem hráče (mapa 1120 m — nelze stínovat celou)
+      sun.shadow.camera.left   = -120;
+      sun.shadow.camera.right  =  120;
+      sun.shadow.camera.top    =  120;
+      sun.shadow.camera.bottom = -120;
+      sun.shadow.bias          = -0.001;   // potlačí shadow acne na plochách
+    }
     scene.add(sun);
+    scene.add(sun.target);   // target musí být v scéně, aby šla aktualizovat pozice
 
-    // Obloha + odrazné světlo ze země (hemisphere)
-    const hemi = new THREE.HemisphereLight(0xb0d8f0, 0x6f9b54, 0.55);
+    // Obloha + odrazné světlo ze země — zesvětlené pokud jsou stíny (ať nejsou uhelně černé)
+    const hemi = new THREE.HemisphereLight(0xb0d8f0, 0x6f9b54, ENABLE_SHADOWS ? 0.65 : 0.55);
     scene.add(hemi);
   }
 
@@ -874,6 +930,10 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     renderer.setClearColor(0xb8d4e8, 1);  // obloha
+    if (ENABLE_SHADOWS) {
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    }
 
     // Scéna
     scene = new THREE.Scene();
@@ -894,7 +954,10 @@
     if (railMesh) scene.add(railMesh);
 
     const roadsMesh = buildRoads();
-    if (roadsMesh) scene.add(roadsMesh);
+    if (roadsMesh) {
+      if (ENABLE_SHADOWS) roadsMesh.traverse(m => { if (m.isMesh) m.receiveShadow = true; });
+      scene.add(roadsMesh);
+    }
 
     // Budovy
     const cityMesh = buildCityMesh();
@@ -944,6 +1007,13 @@
       pz + CAM_OFFSET_Z
     );
     camera.lookAt(px, 1.0, pz);  // koukej na hráče (mírně nad zemí)
+
+    // Stínová kamera sleduje hráče — frustum ±120 m kolem aktuální pozice
+    if (ENABLE_SHADOWS && sun) {
+      sun.target.position.set(px, 0, pz);
+      sun.position.set(px + 60, 100, pz + 40);   // zachovává původní směr slunce
+      sun.target.updateMatrixWorld();
+    }
   }
 
   // ── Render frame ─────────────────────────────────────────
@@ -993,8 +1063,9 @@
       if (used >= candidates.length) continue;   // pool pro tento typ vyčerpán
       typeUsedCount[typeIdx] = used + 1;
       const sprite = candidates[used];
+      if (!sprite.userData.scaled) continue;   // textura ještě nenačtena → neskákat s proxy poměrem
       sprite.visible = true;
-      sprite.position.set(wx2m(n.wx), NPC_SH / 2, wy2m(n.wy));
+      sprite.position.set(wx2m(n.wx), (sprite.userData.sh || NPC_SH) / 2, wy2m(n.wy));
       // Walk animace pro víceframové sprity (enemies)
       if (sprite.userData.frames > 1) {
         const frame = Math.floor((now + sprite.userData.walkPhase) * WALK_FPS) % sprite.userData.frames;
