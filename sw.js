@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v64';   // bump: cesty — disky na každém vrcholu (mezery) + výškové vrstvy (blikání)
+const CACHE = 'smazak-v65';   // bump: budovy s okny (fasádní canvas textura + UV)
 const FILES = [
   './',
   './index.html',

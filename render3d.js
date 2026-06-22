@@ -147,11 +147,59 @@
       }
     }
 
+    // UV pro fasádní texturu (okna). Per-trojúhelník (non-indexed: 3 vrcholy = 1 troj.):
+    // stěna (svislá normála ≈ 0) → mřížka oken podle světových metrů; střecha → bílá část.
+    const uvs = new Float32Array(totalVerts * 2);
+    const WTILE = 3.4, HTILE = 3.0;   // 1 okno na 3.4 m šířky / 3 m výšky (= patro)
+    for (let t = 0; t < totalVerts; t += 3) {
+      const i0 = t * 3, i1 = (t + 1) * 3, i2 = (t + 2) * 3;
+      const ax = positions[i1] - positions[i0], ay = positions[i1 + 1] - positions[i0 + 1], az = positions[i1 + 2] - positions[i0 + 2];
+      const bx = positions[i2] - positions[i0], by = positions[i2 + 1] - positions[i0 + 1], bz = positions[i2 + 2] - positions[i0 + 2];
+      const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+      const isWall = Math.abs(ny) < Math.max(Math.abs(nx), Math.abs(nz));
+      for (let k = 0; k < 3; k++) {
+        const vi = (t + k) * 3, ui = (t + k) * 2;
+        if (!isWall) { uvs[ui] = 0.04; uvs[ui + 1] = 0.04; }   // střecha → bílá (jen barva)
+        else {
+          const along = Math.abs(nx) > Math.abs(nz) ? positions[vi + 2] : positions[vi];
+          uvs[ui] = along / WTILE;
+          uvs[ui + 1] = positions[vi + 1] / HTILE;
+        }
+      }
+    }
+
     const merged = new THREE.BufferGeometry();
     merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     merged.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+    merged.setAttribute('uv',       new THREE.BufferAttribute(uvs, 2));
     // normály dopočítá volající přes computeVertexNormals() (ploché stěny)
     return merged;
+  }
+
+  // ── Fasádní textura (okna) — canvas, násobí se s barvou budovy ───────────
+  // Bílá = stěna (projde barva), tmavší modrošedá = okenní tabule. Dlaždice
+  // se opakuje (RepeatWrapping), UV jsou škálované na světové metry.
+  function buildFacadeTexture() {
+    const S = 128;
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d');
+    g.fillStyle = '#ffffff';          // stěna (×barva budovy)
+    g.fillRect(0, 0, S, S);
+    // okno: tmavá tabule s rámem, vycentrované s okrajem
+    const m = S * 0.18, w = S - 2 * m;
+    g.fillStyle = '#9a9aa2';          // rám okna (světlejší)
+    g.fillRect(m - 3, m - 3, w + 6, w + 6);
+    g.fillStyle = '#3a4254';          // sklo (tmavé → okno)
+    g.fillRect(m, m, w, w);
+    // příčky (kříž) pro detail
+    g.fillStyle = '#9a9aa2';
+    g.fillRect(S / 2 - 1.5, m, 3, w);
+    g.fillRect(m, S / 2 - 1.5, w, 3);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = 1;
+    return tex;
   }
 
   // ── Sestav budovy ────────────────────────────────────────
@@ -193,6 +241,7 @@
 
     const mat = new THREE.MeshLambertMaterial({
       vertexColors: true,
+      map: buildFacadeTexture(),   // okna (násobí se s barvou stěny)
       polygonOffset: true,
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2,
