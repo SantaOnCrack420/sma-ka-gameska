@@ -642,11 +642,12 @@
     console.log('[R3D] Prop kandidáti — stromy:', treeCands.length, 'ulice:', streetCands.length);
   }
 
+  // Jen vyříznuté čisté props (strom_clean/ker_clean/lavicka_clean z rozbitých
+  // slepenců). Lampa nemá čistý zdroj → vynechána.
   const PROP_KINDS = [
-    { src: 'assets/props/strom.png',   n: 16, grid: 'tree',   sw: 5.5, sh: 10, y: 5.0,  vr: 0.25 },
-    { src: 'assets/props/ker.png',     n: 6,  grid: 'tree',   sw: 3.2, sh: 3.2, y: 1.6, vr: 0.30 },
-    { src: 'assets/props/lampa.png',   n: 5,  grid: 'street', sw: 1.8, sh: 7,  y: 3.5,  vr: 0.08 },
-    { src: 'assets/props/lavicka.png', n: 3,  grid: 'street', sw: 5,   sh: 2.4, y: 1.2, vr: 0.12 },
+    { src: 'assets/props/strom_clean.png',   n: 16, grid: 'tree',   sw: 5, sh: 5.4, y: 2.7, vr: 0.25 },
+    { src: 'assets/props/ker_clean.png',     n: 6,  grid: 'tree',   sw: 3, sh: 1.9, y: 0.95, vr: 0.30 },
+    { src: 'assets/props/lavicka_clean.png', n: 3,  grid: 'street', sw: 4, sh: 1.7, y: 0.85, vr: 0.12 },
   ];
 
   function buildWorldProps() {
@@ -720,24 +721,21 @@
   // sh = výška v metrech (konstanta = konzistentní postava). sw = dopočítá se z aspect ratio.
   // frames > 1 = walk sheet animovaný. family/old_dog vyřazeny (multi-postava na 1 PNG).
   const NPC_SH = 3.3;   // základní výška — hMul per-typ ji mírně mění
+  // POZOR: většina původních PNG byla rozbitý slepenec (víc postav/věcí + psi
+  // na jednom obrázku — chyba cut_assets.py). Používáme JEN ověřené čisté sprity.
+  // Vyřazeno: cop, delnik, dedek, businessman, jogger_f, vandal (slepence).
   const NPC_DEFS = [
-    // Civils (indexy 0–10, odpovídá game.js NPC_CIVILIAN_COUNT)
-    { src: 'assets/npc/man_phone.png',   frames: 1 },
-    { src: 'assets/npc/tourist.png',     frames: 1 },
-    { src: 'assets/npc/cop.png',         frames: 1 },
-    { src: 'assets/npc/babka.png',       frames: 1, hMul: 0.88 },   // babka menší
-    { src: 'assets/npc/teenager.png',    frames: 1, hMul: 0.93 },   // teenager menší
-    { src: 'assets/npc/mama.png',        frames: 1 },
-    { src: 'assets/npc/delnik.png',      frames: 1, hMul: 1.05 },   // dělník větší
-    { src: 'assets/npc/vendor.png',      frames: 1 },
-    { src: 'assets/npc/dedek.png',       frames: 1, hMul: 0.88 },   // dedek menší
-    { src: 'assets/npc/businessman.png', frames: 1 },
-    { src: 'assets/npc/jogger_f.png',    frames: 1, hMul: 0.95 },
-    // Enemies (indexy 11–13, odpovídá game.js NPC_ENEMY_COUNT=3)
-    // vandal.png vyřazen — rozbitý slepenec (hlava+plechovka+nohy+dědek), ne čistý pás
-    { src: 'assets/enemy/opilec.png',    frames: 3, hMul: 1.02 },
-    { src: 'assets/enemy/somrak.png',    frames: 4 },
-    { src: 'assets/enemy/gauner.png',    frames: 4 },
+    // Civils (indexy 0–5) — ověřené čisté jednotlivé postavy
+    { src: 'assets/npc/man_phone.png', frames: 1 },
+    { src: 'assets/npc/tourist.png',   frames: 1 },
+    { src: 'assets/npc/babka.png',     frames: 1, hMul: 0.88 },   // babka menší
+    { src: 'assets/npc/teenager.png',  frames: 1, hMul: 0.93 },   // teenager menší
+    { src: 'assets/npc/mama.png',      frames: 1 },
+    { src: 'assets/npc/vendor.png',    frames: 1, hMul: 1.05 },   // dělník v oranžové
+    // Enemies (indexy 6–8) — čisté vodorovné pásy fází (bereme 1. snímek)
+    { src: 'assets/enemy/opilec.png',  frames: 3, hMul: 1.02 },
+    { src: 'assets/enemy/somrak.png',  frames: 4 },
+    { src: 'assets/enemy/gauner.png',  frames: 4 },
   ];
   const MAX_NPC = 75;   // ~5 spritů na typ — při husté zástavbě kolem hráče nedojdou
 

@@ -459,8 +459,8 @@ function spawnPigeon() {
   const p = randWalkable(160); if (p) pigeons.push({ wx: p.wx, wy: p.wy, t: Math.random()*100, hp: 1 });
 }
 const ENEMY_NPC_CHANCE = 0.25;
-const NPC_CIVILIAN_COUNT = 11;   // indexy 0-10 v render3d NPC_DEFS (civils)
-const NPC_ENEMY_COUNT    = 3;    // indexy 11-13 v render3d NPC_DEFS (opilec, somrak, gauner)
+const NPC_CIVILIAN_COUNT = 6;    // indexy 0-5 v render3d NPC_DEFS (čistí civilové)
+const NPC_ENEMY_COUNT    = 3;    // indexy 6-8 v render3d NPC_DEFS (opilec, somrak, gauner)
 function spawnNpc() {
   const p = randWalkableNear(250, 1050);   // okolo hráče, rozprostřené (ne mačkat na jednu hromadu)
   if (!p) return;
@@ -477,7 +477,6 @@ function spawnNpc() {
     agro: false,
     hp: isEnemy ? 2 : 0,
     typeIdx,
-    static: !isEnemy && typeIdx === 7,   // vendor (večerkář) stojí na místě
   });
 }
 function spawnCoganRing(hp = 2) {
@@ -696,9 +695,6 @@ function update() {
         if (!isSolidAt(enx, n.wy)) n.wx = enx; else { n.dir += Math.PI*0.35; n.vx = 0; }
         if (!isSolidAt(n.wx, eny)) n.wy = eny; else { n.dir += Math.PI*0.35; n.vy = 0; }
       }
-    } else if (n.static) {
-      // Statický NPC (vendor/večerkář) — stojí na místě
-      n.vx = 0; n.vy = 0;
     } else {
       // Normální chodec — wandering
       if (Math.random() < 0.01) n.dir += (Math.random()-0.5)*0.7;

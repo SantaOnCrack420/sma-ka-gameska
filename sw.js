@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v62';   // bump: Šimmy se načítá první (ne až za NPC/props) → naběhne hned
+const CACHE = 'smazak-v63';   // bump: jen ČISTÉ assety (rozbité slepence vyřazeny) — konec "psů a davů"
 const FILES = [
   './',
   './index.html',

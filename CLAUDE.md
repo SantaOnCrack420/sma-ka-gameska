@@ -121,14 +121,25 @@ const AGRO_SPD  = 0.85;  // rychlost chasing
 - `assets/mapdata.js` — bitmapa, měnit jen přes editor mapy
 
 ## Dostupné assety (assets/npc/, assets/enemy/, assets/props/)
-NPC: man_phone, tourist, cop, babka, teenager, mama, delnik, vendor, dedek, businessman, jogger_f
-Enemy: opilec (3f), vandal (8f), somrak (2f), gauner (4f) — v závorce počet walk framů
-Props: strom, strom2, ker, lampa, lavicka + p_00..p_12
+⚠️ **POZOR: většina PNG je ROZBITÝ SLEPENEC** (cut_assets.py špatně nařezal source_sheets
+→ víc postav/věcí + psi na jednom obrázku). NEpoužívej je bez vizuální kontroly!
+
+**Ověřené ČISTÉ (jednotlivá postava) — používané v NPC_DEFS:**
+- Civilové: man_phone, tourist, babka, teenager, mama, vendor (dělník v oranžové)
+- Enemy (čisté vodorovné pásy fází, bereme 1. snímek): opilec (3f), somrak (4f), gauner (4f)
+- Props: `strom_clean.png`, `ker_clean.png`, `lavicka_clean.png` (vyříznuté ze `strom.png`/`lampa.png`)
+
+**ROZBITÉ — NEPOUŽÍVAT** (slepence): cop (=běžkyně+dítě), delnik (mrňavý blob),
+dedek (svalovec+pes), businessman (uříznutá hlava), jogger_f (děti+trhovkyně),
+vandal (hlava+plechovka+nohy+dědek), ker/lampa/lavicka/strom (víc věcí+psi).
+TODO: pořádně přeřezat z source_sheets/ (sheet_*.png) opraveným cut_assets.py.
 
 ## Opakující se bugy — neřeš znova špatně
 | Bug | Fix |
 |---|---|
 | NPC neviditelné | `window.npcs = npcs` po init + po reset v startGame() |
+| NPC = "psi"/"davy"/řádky postaviček | ROZBITÉ PNG slepence — používej jen ověřené čisté assety (viz výše) |
+| NPC se hýbe jako "tečky" daleko | spawn kolem hráče (`randWalkableNear`) + recyklace, ne přes celou mapu |
 | NPC malinkaté | `NPC_SH / 2` jako Y pozice, scale z aspect ratio po načtení |
 | `def.sh` neexistuje | Použij `NPC_SH` konstantu |
 | `walkOffset` vs `walkPhase` | userData ukládá `walkPhase` |
