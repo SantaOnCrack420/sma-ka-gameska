@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v68';   // bump: přepis cest — sjednocený asfalt (konec blikání) + středové čáry a krajnice
+const CACHE = 'smazak-v69';   // bump: odolnější PWA (allSettled install, jen same-origin fetch)
 const FILES = [
   './',
   './index.html',
@@ -18,9 +18,13 @@ const FILES = [
   './assets/apple-touch-icon.png',
 ];
 
+// ODOLNÝ install: každý soubor zvlášť (allSettled) → jedno chybějící/pomalé
+// stažení NEPOLOŽÍ celou instalaci service workeru (dřív addAll = vše nebo nic).
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      .then(c => Promise.allSettled(FILES.map(f => c.add(f))))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -32,16 +36,27 @@ self.addEventListener('activate', e => {
   );
 });
 
-// NETWORK-FIRST: vždy zkus síť (aktuální verze), cache jen jako offline záloha.
+// NETWORK-FIRST jen pro VLASTNÍ zdroje (fonty apod. nechá na prohlížeči).
+// Cache slouží jako offline záloha; navigace fallbackuje na index.html.
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== location.origin) return;   // cizí origin (Google Fonts) neřešíme
+
   e.respondWith(
-    fetch(e.request)
+    fetch(req)
       .then(resp => {
-        const copy = resp.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+        if (resp && resp.ok) {
+          const copy = resp.clone();
+          caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+        }
         return resp;
       })
-      .catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
+      .catch(() =>
+        caches.match(req).then(r =>
+          r || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error())
+        )
+      )
   );
 });
