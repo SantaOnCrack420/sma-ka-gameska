@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v58';   // bump: NPC spawn kolem hráče + recyklace, Šimmy silueta přes baráky, větší NPC pool
+const CACHE = 'smazak-v59';   // bump: props streaming (stromy/lampy všude), vendor static, ostřejší sprity, zoom
 const FILES = [
   './',
   './index.html',

@@ -477,6 +477,7 @@ function spawnNpc() {
     agro: false,
     hp: isEnemy ? 2 : 0,
     typeIdx,
+    static: !isEnemy && typeIdx === 7,   // vendor (večerkář) stojí na místě
   });
 }
 function spawnCoganRing(hp = 2) {
@@ -695,6 +696,9 @@ function update() {
         if (!isSolidAt(enx, n.wy)) n.wx = enx; else { n.dir += Math.PI*0.35; n.vx = 0; }
         if (!isSolidAt(n.wx, eny)) n.wy = eny; else { n.dir += Math.PI*0.35; n.vy = 0; }
       }
+    } else if (n.static) {
+      // Statický NPC (vendor/večerkář) — stojí na místě
+      n.vx = 0; n.vy = 0;
     } else {
       // Normální chodec — wandering
       if (Math.random() < 0.01) n.dir += (Math.random()-0.5)*0.7;

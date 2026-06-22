@@ -26,6 +26,19 @@
   let propsGroup = null;
   let npcSpritePool = [];
 
+  // ── Props streaming (stromy/keře/lampy/lavičky kolem hráče) ──
+  // Kandidátní body se předpočítají z vektorů (zeleň, cesty) a pool spritů
+  // se průběžně přemisťuje do okolí hráče → props vidíš všude, ne jen u obchodů.
+  let propPool = [];          // [{sprite, kind, candKey}]
+  let treeCands = [];         // {x,z} v metrech — zeleň (stromy/keře)
+  let streetCands = [];       // {x,z} v metrech — podél cest (lampy/lavičky)
+  let treeGrid = null, streetGrid = null;
+  const PROP_CELL = 80;       // velikost buňky prostorové mřížky (m)
+  function seededR(seed) {
+    const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
   // ── Palette pro budovy ──────────────────────────────────
   // 12 tónů šedohnědé/cihlové zástavby — stabilní hash z indexu budovy,
   // takže sousední domy mají různé barvy ale barevný vzorek je deterministický.
@@ -530,7 +543,7 @@
       transparent: true,
       depthWrite: false,
       depthTest: true,     // schová se za budovami které jsou fyzicky před ním
-      alphaTest: 0.05,     // odstraní šedé okraje z průhledné textury
+      alphaTest: 0.2,      // tvrdší ořez = ostřejší okraj postavy
     });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(1.6, 3.3, 1);   // proxy; onLoad přepočítá z aspect ratio framu
@@ -578,7 +591,7 @@
   function addBillboard(group, tex, x, y, z, sw, sh, order) {
     const mat = new THREE.SpriteMaterial({
       map: tex, transparent: true, depthWrite: false,
-      depthTest: true, alphaTest: 0.1,
+      depthTest: true, alphaTest: 0.3,
     });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(sw, sh, 1);
@@ -589,66 +602,118 @@
   }
 
   // ── World Props (stromy, keře, lampy u POI a po ulicích) ─
-  function buildWorldProps() {
-    const group = new THREE.Group();
-    const loader = new THREE.TextureLoader();
-    const texStrom   = loadTex(loader, 'assets/props/strom.png');
-    const texKer     = loadTex(loader, 'assets/props/ker.png');
-    const texLampa   = loadTex(loader, 'assets/props/lampa.png');
-    const texLavicka = loadTex(loader, 'assets/props/lavicka.png');
-
-    // Deterministický pseudo-random ze seedu (stejný výsledek každý run)
-    function seededR(seed) {
-      const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
-      return x - Math.floor(x);
+  // Předpočítej kandidátní body z vektorů + postav prostorovou mřížku
+  function cellKey(x, z) { return Math.floor(x / PROP_CELL) + ',' + Math.floor(z / PROP_CELL); }
+  function buildGrid(cands) {
+    const m = new Map();
+    for (let i = 0; i < cands.length; i++) {
+      const k = cellKey(cands[i].x, cands[i].z);
+      let a = m.get(k); if (!a) { a = []; m.set(k, a); }
+      a.push(i);
     }
-    // Kontrola průchodnosti: metry → svět-px → COL grid
-    function canPlace(xm, zm) {
-      if (typeof window.isSolidAt !== 'function') return true;
-      return !window.isSolidAt(xm * PXM, zm * PXM);
+    return m;
+  }
+  function buildPropCandidates() {
+    // Stromy/keře → vrcholy zelených polygonů (parky, trávníky)
+    if (typeof VEC_GREEN !== 'undefined') {
+      for (const a of VEC_GREEN) {
+        if (!a || a.length < 7) continue;
+        for (let i = 1; i + 1 < a.length; i += 2)
+          treeCands.push({ x: wx2m(a[i]), z: wy2m(a[i + 1]) });
+      }
     }
-
-    if (typeof POI !== 'undefined') {
-      for (let i = 0; i < POI.length; i++) {
-        const [, wx, wy] = POI[i];
-        const x = wx2m(wx), z = wy2m(wy);
-        // 5 nezávislých seeded hodnot pro jitter, stranu a scale
-        const r0 = seededR(i * 7 + 0);
-        const r1 = seededR(i * 7 + 1);
-        const r2 = seededR(i * 7 + 2);
-        const r3 = seededR(i * 7 + 3);
-        const r4 = seededR(i * 7 + 4);
-        const side   = r0 < 0.5 ? 1 : -1;
-        const jx     = (r1 - 0.5) * 2.5;   // ±1.25 m jitter X
-        const jz     = (r2 - 0.5) * 2.5;   // ±1.25 m jitter Z
-        const scVar  = 0.85 + r4 * 0.30;   // scale variace ±15 %
-
-        // Strom naproti obchodu
-        const tx = x - side * 5 + jx, tz = z + 2 + jz;
-        if (canPlace(tx, tz))
-          addBillboard(group, texStrom, tx, 3.5 * scVar, tz, 3.5 * scVar, 7 * scVar);
-
-        // Keř vedle obchodu
-        const kx = x + side * 4.5 + jx * 0.5, kz = z - 1 + jz * 0.5;
-        if (canPlace(kx, kz))
-          addBillboard(group, texKer, kx, 1.25 * scVar, kz, 2.5 * scVar, 2.5 * scVar);
-
-        // Lampa: seeded místo i%2 (60 % POI dostane lampu)
-        if (r3 < 0.6) {
-          const lx = x + 2 + jx * 0.3, lz = z - 5 + jz * 0.3;
-          if (canPlace(lx, lz))
-            addBillboard(group, texLampa, lx, 2.5, lz, 1.2, 5);
-        }
-
-        // Lavička: seeded místo i%3 (~40 % POI)
-        if (r3 >= 0.6) {
-          const bx = x - 3 + jx * 0.5, bz = z + 4 + jz * 0.5;
-          if (canPlace(bx, bz))
-            addBillboard(group, texLavicka, bx, 0.75, bz, 3 * scVar, 1.5 * scVar);
+    // Lampy/lavičky → kolmý offset od segmentů cest (na chodník, ne doprostřed)
+    if (typeof VEC_ROADS !== 'undefined') {
+      for (const a of VEC_ROADS) {
+        if (!a || a.length < 5) continue;
+        for (let i = 1; i + 3 < a.length; i += 2) {
+          const x1 = wx2m(a[i]), z1 = wy2m(a[i + 1]);
+          const x2 = wx2m(a[i + 2]), z2 = wy2m(a[i + 3]);
+          const mx = (x1 + x2) / 2, mz = (z1 + z2) / 2;
+          const dx = x2 - x1, dz = z2 - z1, len = Math.hypot(dx, dz) || 1;
+          const nx = -dz / len, nz = dx / len, off = 6;
+          streetCands.push({ x: mx + nx * off, z: mz + nz * off });
+          streetCands.push({ x: mx - nx * off, z: mz - nz * off });
         }
       }
     }
+    treeGrid = buildGrid(treeCands);
+    streetGrid = buildGrid(streetCands);
+    console.log('[R3D] Prop kandidáti — stromy:', treeCands.length, 'ulice:', streetCands.length);
+  }
+
+  const PROP_KINDS = [
+    { src: 'assets/props/strom.png',   n: 32, grid: 'tree',   sw: 5.5, sh: 10, y: 5.0,  vr: 0.25 },
+    { src: 'assets/props/ker.png',     n: 14, grid: 'tree',   sw: 3.2, sh: 3.2, y: 1.6, vr: 0.30 },
+    { src: 'assets/props/lampa.png',   n: 12, grid: 'street', sw: 1.8, sh: 7,  y: 3.5,  vr: 0.08 },
+    { src: 'assets/props/lavicka.png', n: 10, grid: 'street', sw: 5,   sh: 2.4, y: 1.2, vr: 0.12 },
+  ];
+
+  function buildWorldProps() {
+    const group = new THREE.Group();
+    const loader = new THREE.TextureLoader();
+    buildPropCandidates();
+
+    for (const k of PROP_KINDS) {
+      const tex = loadTex(loader, k.src);
+      for (let i = 0; i < k.n; i++) {
+        const s = addBillboard(group, tex, 0, k.y, 0, k.sw, k.sh, 5);
+        s.visible = false;
+        propPool.push({ sprite: s, kind: k, candKey: null });
+      }
+    }
     return group;
+  }
+
+  // Najdi volný kandidát v prstenci [near, far] kolem hráče (z mřížky)
+  function pickCandidate(cands, grid, px, pz, near, far, occupied, gname) {
+    if (!grid || !cands.length) return -1;
+    const cx = Math.floor(px / PROP_CELL), cz = Math.floor(pz / PROP_CELL);
+    const span = Math.ceil(far / PROP_CELL);
+    let best = -1, bestRand = -1;
+    for (let gx = cx - span; gx <= cx + span; gx++) {
+      for (let gz = cz - span; gz <= cz + span; gz++) {
+        const arr = grid.get(gx + ',' + gz); if (!arr) continue;
+        for (const idx of arr) {
+          if (occupied.has(gname + ':' + idx)) continue;
+          const c = cands[idx];
+          const d = Math.hypot(c.x - px, c.z - pz);
+          if (d < near || d > far) continue;
+          const rr = seededR(idx * 3.1);  // náhodný výběr → rozmanitost
+          if (rr > bestRand) { bestRand = rr; best = idx; }
+        }
+      }
+    }
+    return best;
+  }
+
+  let _propTick = 0;
+  function updateProps(pwx, pwy) {
+    if (!propPool.length) return;
+    if (_propTick++ % 8 !== 0) return;   // throttle — stačí 7–8× za sekundu
+    const px = wx2m(pwx), pz = wy2m(pwy);
+    const NEAR = 16, FAR = 155;          // m — drž props v okolí hráče
+    const occupied = new Set();
+    for (const p of propPool) if (p.candKey) occupied.add(p.candKey);
+    for (const p of propPool) {
+      if (p.candKey) {
+        const pos = p.sprite.position;
+        if (Math.hypot(pos.x - px, pos.z - pz) <= FAR) continue;  // pořád v dohledu
+        occupied.delete(p.candKey); p.candKey = null;
+      }
+      const tree = p.kind.grid === 'tree';
+      const cands = tree ? treeCands : streetCands;
+      const grid = tree ? treeGrid : streetGrid;
+      const idx = pickCandidate(cands, grid, px, pz, NEAR, FAR, occupied, p.kind.grid);
+      if (idx < 0) { p.sprite.visible = false; continue; }
+      const key = p.kind.grid + ':' + idx;
+      occupied.add(key); p.candKey = key;
+      const c = cands[idx];
+      const sc = 1 + (seededR(idx * 1.7) - 0.5) * 2 * p.kind.vr;
+      p.sprite.scale.set(p.kind.sw * sc, p.kind.sh * sc, 1);
+      p.sprite.position.set(c.x, p.kind.y * sc, c.z);
+      p.sprite.visible = true;
+    }
   }
 
   // ── NPC sprite pool (chodci + nepřátelé po ulicích) ──────
@@ -685,7 +750,7 @@
       const def = NPC_DEFS[defIdx];
       const mat = new THREE.SpriteMaterial({
         transparent: true, depthWrite: false,
-        depthTest: true, alphaTest: 0.1,
+        depthTest: true, alphaTest: 0.35,
       });
       const sprite = new THREE.Sprite(mat);
       sprite.scale.set(NPC_SH * 0.55, NPC_SH, 1);   // proxy do načtení textury
@@ -1007,8 +1072,8 @@
 
   // ── Kamera: sleduje hráče ────────────────────────────────
   const CAM_OFFSET_X = 0;
-  const CAM_OFFSET_Y = 55;   // výška nad hráčem
-  const CAM_OFFSET_Z = 38;   // odstup za hráčem
+  const CAM_OFFSET_Y = 46;   // výška nad hráčem (sníženo z 55 → bližší/větší postavy)
+  const CAM_OFFSET_Z = 32;   // odstup za hráčem (sníženo z 38)
 
   function _updateCamera() {
     if (!camera) return;
@@ -1059,6 +1124,9 @@
 
     // Aktualizuj viditelnost POI názvů
     updatePOIVisibility();
+
+    // Streamuj props (stromy/lampy/lavičky) do okolí hráče
+    if (player) updateProps(player.wx, player.wy);
 
     // Aktualizuj NPC sprity: pozice + walk animace
     // Přiřaď každého NPC ke spritu správného typeIdx (ne pool-index mapping)
