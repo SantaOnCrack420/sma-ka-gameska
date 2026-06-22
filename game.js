@@ -460,7 +460,7 @@ function spawnPigeon() {
 }
 const ENEMY_NPC_CHANCE = 0.25;
 const NPC_CIVILIAN_COUNT = 11;   // indexy 0-10 v render3d NPC_DEFS (civils)
-const NPC_ENEMY_COUNT    = 4;    // indexy 11-14 v render3d NPC_DEFS (enemy walk)
+const NPC_ENEMY_COUNT    = 3;    // indexy 11-13 v render3d NPC_DEFS (opilec, somrak, gauner)
 function spawnNpc() {
   const p = randWalkableNear(250, 1050);   // okolo hráče, rozprostřené (ne mačkat na jednu hromadu)
   if (!p) return;

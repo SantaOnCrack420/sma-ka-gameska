@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v60';   // bump: snížená hustota NPC (28→15) i props (68→30), víc rozprostřené
+const CACHE = 'smazak-v61';   // bump: NPC = 1 snímek (ne celý spritesheet), vandal vyřazen
 const FILES = [
   './',
   './index.html',

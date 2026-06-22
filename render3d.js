@@ -733,10 +733,10 @@
     { src: 'assets/npc/dedek.png',       frames: 1, hMul: 0.88 },   // dedek menší
     { src: 'assets/npc/businessman.png', frames: 1 },
     { src: 'assets/npc/jogger_f.png',    frames: 1, hMul: 0.95 },
-    // Enemies (indexy 11–14, odpovídá game.js NPC_ENEMY_COUNT)
+    // Enemies (indexy 11–13, odpovídá game.js NPC_ENEMY_COUNT=3)
+    // vandal.png vyřazen — rozbitý slepenec (hlava+plechovka+nohy+dědek), ne čistý pás
     { src: 'assets/enemy/opilec.png',    frames: 3, hMul: 1.02 },
-    { src: 'assets/enemy/vandal.png',    frames: 8, hMul: 1.05 },
-    { src: 'assets/enemy/somrak.png',    frames: 2 },
+    { src: 'assets/enemy/somrak.png',    frames: 4 },
     { src: 'assets/enemy/gauner.png',    frames: 4 },
   ];
   const MAX_NPC = 75;   // ~5 spritů na typ — při husté zástavbě kolem hráče nedojdou
@@ -766,28 +766,28 @@
       npcSpritePool.push(sprite);
     }
 
-    // 2. Načti textury per-typ; onLoad okamžitě přiřadí mapu + přepočítá scale
+    // 2. Načti textury per-typ; onLoad nakrájí na PRVNÍ snímek (sdílená textura
+    //    pro celý typ — stejný princip jako Šimmy, který funguje). Žádné klonování,
+    //    žádná animace → každý NPC = jedna čistá postava, ne řádek všech fází.
     NPC_DEFS.forEach((def, defIdx) => {
       loadTex(loader, def.src, (tex) => {
         const frameW = tex.image.width / def.frames;
         const frameH = tex.image.height;
         if (frameH <= 0) return;
+        if (def.frames > 1) {
+          tex.repeat.set(1 / def.frames, 1);   // ukaž jen 1. snímek
+          tex.offset.set(0, 0);
+          tex.needsUpdate = true;
+        }
         const sh = NPC_SH * (def.hMul || 1);
         const sw = sh * (frameW / frameH);
         for (const sp of npcSpritePool) {
           if (sp.userData.defIdx !== defIdx) continue;
-          // víceframové sprity potřebují klonovanou texturu (nezávislý offset.x na animaci)
-          const map = (def.frames > 1) ? tex.clone() : tex;
-          if (def.frames > 1) {
-            map.repeat.set(1 / def.frames, 1);
-            map.offset.set(0, 0);
-            map.needsUpdate = true;
-          }
-          sp.material.map = map;
+          sp.material.map = tex;
           sp.material.needsUpdate = true;
           sp.scale.set(sw, sh, 1);
           sp.userData.scaled = true;
-          sp.userData.sh = sh;   // uloží se pro Y pozici v renderFrame
+          sp.userData.sh = sh;   // pro Y pozici v renderFrame
         }
       });
     });
@@ -1128,10 +1128,9 @@
     // Streamuj props (stromy/lampy/lavičky) do okolí hráče
     if (player) updateProps(player.wx, player.wy);
 
-    // Aktualizuj NPC sprity: pozice + walk animace
+    // Aktualizuj NPC sprity: pozice (statický 1. snímek, bez animace)
     // Přiřaď každého NPC ke spritu správného typeIdx (ne pool-index mapping)
     const npcs = (typeof window.npcs !== 'undefined') ? window.npcs : [];
-    const WALK_FPS = 6;
 
     // Seskup pool podle defIdx (typ NPC)
     const poolByType = {};
@@ -1154,12 +1153,6 @@
       if (!sprite.userData.scaled) continue;   // textura ještě nenačtena → neskákat s proxy poměrem
       sprite.visible = true;
       sprite.position.set(wx2m(n.wx), (sprite.userData.sh || NPC_SH) / 2, wy2m(n.wy));
-      // Walk animace pro víceframové sprity (enemies)
-      if (sprite.userData.frames > 1) {
-        const frame = Math.floor((now + sprite.userData.walkPhase) * WALK_FPS) % sprite.userData.frames;
-        sprite.material.map.offset.x = frame / sprite.userData.frames;
-        sprite.material.map.needsUpdate = true;
-      }
     }
 
     renderer.render(scene, camera);
