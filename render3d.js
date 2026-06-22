@@ -511,100 +511,126 @@
     return geo;
   }
 
+  // Nastav konstantní Y všem vrcholům ribbonu
+  function setRibbonY(geo, y) {
+    const p = geo.attributes.position.array;
+    for (let i = 1; i < p.length; i += 3) p[i] = y;
+  }
+  // Sloučení geometrií s per-vrcholovou barvou (kvůli sjednocení asfaltů do 1 meshe)
+  function mergeColored(parts) {
+    let total = 0;
+    for (const p of parts) total += p.geo.attributes.position.count;
+    if (total === 0) return null;
+    const pos = new Float32Array(total * 3), col = new Float32Array(total * 3);
+    let off = 0; const c = new THREE.Color();
+    for (const { geo, color } of parts) {
+      const src = geo.attributes.position.array, cnt = geo.attributes.position.count;
+      pos.set(src, off * 3);
+      c.setHex(color);
+      for (let i = 0; i < cnt; i++) { col[(off + i) * 3] = c.r; col[(off + i) * 3 + 1] = c.g; col[(off + i) * 3 + 2] = c.b; }
+      off += cnt;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return g;
+  }
+  function pushQuad(out, x0, z0, x1, z1, nx, nz, y) {
+    out.push(x0 - nx, y, z0 - nz, x0 + nx, y, z0 + nz, x1 - nx, y, z1 - nz);
+    out.push(x0 + nx, y, z0 + nz, x1 + nx, y, z1 + nz, x1 - nx, y, z1 - nz);
+  }
+  // Čáry na vozovce: lateral=boční posun od osy, halfW=poloviční šířka čáry,
+  // dashLen/gapLen=vzor (gap<=0 → plná). Fáze plyne přes segmenty (souvislé čárky).
+  function emitMarking(coords, lateral, halfW, dashLen, gapLen, y, out) {
+    const n = Math.floor(coords.length / 2);
+    let phase = 0;
+    for (let i = 0; i < n - 1; i++) {
+      const ax = coords[i * 2], az = coords[i * 2 + 1];
+      const bx = coords[i * 2 + 2], bz = coords[i * 2 + 3];
+      let dx = bx - ax, dz = bz - az; const len = Math.hypot(dx, dz);
+      if (len < 1e-3) continue;
+      dx /= len; dz /= len;
+      const px = -dz, pz = dx;                 // kolmice (jednotková)
+      const ox = px * lateral, oz = pz * lateral;
+      const nx = px * halfW, nz = pz * halfW;
+      if (gapLen <= 0) {
+        pushQuad(out, ax + ox, az + oz, bx + ox, bz + oz, nx, nz, y);
+      } else {
+        let d = 0;
+        while (d < len) {
+          const g = (phase + d) % (dashLen + gapLen);
+          if (g < dashLen) {
+            const seg = Math.min(dashLen - g, len - d);
+            pushQuad(out, ax + dx * d + ox, az + dz * d + oz, ax + dx * (d + seg) + ox, az + dz * (d + seg) + oz, nx, nz, y);
+            d += seg;
+          } else d += (dashLen + gapLen) - g;
+        }
+      }
+      phase += len;
+    }
+  }
+
   function buildRoads() {
     if (typeof VEC_ROADS === 'undefined' || VEC_ROADS.length === 0) return null;
 
-    const sidewalkGeos = [];
-    const asphaltGeos  = [];
-    const junctionSW   = [];
-    const junctionAS   = [];
-    // Výškové vrstvy s VELKÝM rozestupem → konec z-fightingu (blikání):
-    // zeleň 0.05 < chodník 0.18 < asfalt 0.34. Disky ve stejné výšce jako jejich pás.
-    const SW_Y = 0.18, AS_Y = 0.34;
+    const swGeos = [];        // chodníky (ribbon + disky)
+    const asParts = [];       // asfalt {geo,color} — VŠE v jednom meshi (konec blikání)
+    const markVerts = [];     // středové čáry + krajnice
+    // Výškové vrstvy: zeleň 0.05 < chodník 0.12 < asfalt 0.22 < čáry 0.27
+    const SW_Y = 0.12, AS_Y = 0.22, LINE_Y = 0.27;
+    const COL_SW = 0xb9b3a6, COL_MAIN = 0x454552, COL_ALT = 0x9a9286, COL_LINE = 0xd8d2b8;
 
     for (const a of VEC_ROADS) {
       if (!a || a.length < 5) continue;
-      const code = String(a[0]);
+      const code = String(a[0]); const cls = parseInt(code) || 0;
       const widths = ROAD_WIDTHS[code] || ROAD_WIDTHS['0'];
       const asphaltHalf = widths[0] / 2;
       const sidewalkHalf = asphaltHalf + widths[1];
-
       const coords = pxCoordsToM(a, true);
       if (coords.length < 4) continue;
+      const asColor = (cls < 0) ? COL_ALT : COL_MAIN;
 
-      // Chodník (širší) — jen pokud má chodník
+      // Chodník
       if (widths[1] > 0) {
-        const geoSW = buildRibbon(coords, sidewalkHalf);
-        if (geoSW) {
-          const pos = geoSW.attributes.position.array;
-          for (let i = 1; i < pos.length; i += 3) pos[i] = SW_Y;
-          geoSW.attributes.position.needsUpdate = true;
-          sidewalkGeos.push(geoSW);
-        }
+        const sw = buildRibbon(coords, sidewalkHalf);
+        if (sw) { setRibbonY(sw, SW_Y); swGeos.push(sw); }
       }
-
-      // Disky na KAŽDÉM vrcholu trasy (záplata mezer v ohybech i na křižovatkách
-      // — ribbony se v zatáčkách nepotkávají a vznikaly zelené "zuby").
+      // Asfalt ribbon
+      const as = buildRibbon(coords, asphaltHalf);
+      if (as) { setRibbonY(as, AS_Y); asParts.push({ geo: as, color: asColor }); }
+      // Disky na každém vrcholu (záplata ohybů/křižovatek)
       for (let k = 0; k + 1 < coords.length; k += 2) {
         const vx = coords[k], vz = coords[k + 1];
-        // disky o něco větší než pás → překryjí sousedy a pohltí tenké zelené klíny
-        if (widths[1] > 0) junctionSW.push(buildDisc(vx, vz, sidewalkHalf * 1.08, SW_Y));
-        junctionAS.push(buildDisc(vx, vz, asphaltHalf * 1.18, AS_Y));
+        if (widths[1] > 0) swGeos.push(buildDisc(vx, vz, sidewalkHalf * 1.08, SW_Y));
+        asParts.push({ geo: buildDisc(vx, vz, asphaltHalf * 1.18, AS_Y), color: asColor });
       }
-
-      // Asfalt (užší)
-      const asphaltColor = (parseInt(code) < 0) ? 0x9a9286 : 0x454552;
-      const geoAS = buildRibbon(coords, asphaltHalf);
-      if (geoAS) {
-        const pos = geoAS.attributes.position.array;
-        for (let i = 1; i < pos.length; i += 3) pos[i] = AS_Y;
-        geoAS.attributes.position.needsUpdate = true;
-        // Třídu <0 přidáme do oddělené skupiny pro jinou barvu
-        if (parseInt(code) < 0) {
-          // Malé cestičky — jiná barva asfalt
-          geoAS._altColor = true;
+      // Vodorovné značení (jen normální silnice, ne pěšinky)
+      if (cls >= 0 && asphaltHalf >= 2.2) {
+        emitMarking(coords, 0, 0.16, 3.0, 4.5, LINE_Y, markVerts);              // středová přerušovaná
+        const edge = asphaltHalf - 0.45;
+        if (cls >= 1) {                                                          // krajnice na širších
+          emitMarking(coords,  edge, 0.12, 1, 0, LINE_Y, markVerts);
+          emitMarking(coords, -edge, 0.12, 1, 0, LINE_Y, markVerts);
         }
-        asphaltGeos.push(geoAS);
       }
     }
 
     const group = new THREE.Group();
-
-    // Chodníky (ribbon + junction discs)
-    if (sidewalkGeos.length > 0) {
-      const allSW = sidewalkGeos.concat(junctionSW.filter(Boolean));
-      const merged = mergeFlat(allSW);
-      if (merged) {
-        merged.computeVertexNormals();
-        const mat = new THREE.MeshLambertMaterial({ color: 0xb9b3a6 });
-        group.add(new THREE.Mesh(merged, mat));
-      }
+    if (swGeos.length) {
+      const m = mergeFlat(swGeos);
+      if (m) { m.computeVertexNormals(); group.add(new THREE.Mesh(m, new THREE.MeshLambertMaterial({ color: COL_SW }))); }
     }
-
-    // Asfalt — hlavní silnice (kód >= 0) + junction discs
-    const mainGeos = asphaltGeos.filter(g => !g._altColor);
-    const altGeos  = asphaltGeos.filter(g => g._altColor);
-    const mainJunc = junctionAS.filter(Boolean);
-
-    if (mainGeos.length > 0) {
-      const merged = mergeFlat(mainGeos.concat(mainJunc));
-      if (merged) {
-        merged.computeVertexNormals();
-        const mat = new THREE.MeshLambertMaterial({ color: 0x454552 });
-        group.add(new THREE.Mesh(merged, mat));
-      }
+    if (asParts.length) {
+      const m = mergeColored(asParts);
+      if (m) { m.computeVertexNormals(); group.add(new THREE.Mesh(m, new THREE.MeshLambertMaterial({ vertexColors: true }))); }
     }
-    if (altGeos.length > 0) {
-      const merged = mergeFlat(altGeos);
-      if (merged) {
-        merged.computeVertexNormals();
-        const mat = new THREE.MeshLambertMaterial({ color: 0x9a9286 });
-        group.add(new THREE.Mesh(merged, mat));
-      }
+    if (markVerts.length) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(markVerts), 3));
+      g.computeVertexNormals();
+      group.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: COL_LINE })));
     }
-
-    console.log('[R3D] Silnice OK, segmentů:', VEC_ROADS.length,
-      '| chodník geo:', sidewalkGeos.length, '| asfalt geo:', asphaltGeos.length);
+    console.log('[R3D] Silnice OK (sjednocený asfalt):', VEC_ROADS.length, 'tras');
     return group;
   }
 

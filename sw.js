@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v67';   // bump: textura trávy + hlína, stíny texel-snap (nebliká), 2048 shadow
+const CACHE = 'smazak-v68';   // bump: přepis cest — sjednocený asfalt (konec blikání) + středové čáry a krajnice
 const FILES = [
   './',
   './index.html',
