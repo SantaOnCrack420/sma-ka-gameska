@@ -15,6 +15,12 @@
       padding:9px 12px;border:2px solid #ffd23f;border-radius:10px;max-width:80%;font-size:13px;line-height:1.4}
     #hud b{color:#ffd23f}
     #joy{position:fixed;left:0;bottom:0;width:100%;height:55%;z-index:3}
+    #eye{position:fixed;right:16px;bottom:120px;width:64px;height:64px;z-index:6;border-radius:50%;
+      background:rgba(8,8,16,.78);border:2px solid #ffd23f;color:#ffd23f;font-size:30px;display:flex;
+      align-items:center;justify-content:center;touch-action:none}
+    #eye.act{background:#ffd23f;color:#1a1a2e}
+    #eyehint{position:fixed;right:14px;bottom:188px;z-index:6;color:#ffd23f;font-size:11px;
+      background:#000a;padding:2px 6px;border-radius:6px}
     #err{position:fixed;left:8px;bottom:8px;z-index:6;color:#ff6b6b;font:12px monospace;background:#000a;padding:4px 8px;border-radius:6px}
   </style>
 </head>
@@ -23,6 +29,8 @@
   <img id="simmy" src="assets/simmy_char.png" alt="Šimmy">
   <div id="hud"><b>HERNÍ režim (test)</b><br>Táhni dole = chození · WASD/šipky na PC.<br>Kamera sleduje Šimmyho reálným Těšínem.</div>
   <div id="joy"></div>
+  <div id="eyehint">drž = otoč · ťukni = srovnat</div>
+  <div id="eye">👁</div>
   <div id="err"></div>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
@@ -30,7 +38,8 @@
   try {
     const SPAWN = [18.6285, 49.7464];           // Český Těšín
     let lng = SPAWN[0], lat = SPAWN[1];
-    const PITCH = 62, ZOOM = 18.7, BEARING = 0;  // víc 3D + blíž → svět větší vs Šimmy
+    const PITCH = 62, ZOOM = 18.7;  // víc 3D + blíž → svět větší vs Šimmy
+    let bearing = 0;                // mění "oko" (otáčení pohledu)
 
     const map = new maplibregl.Map({
       container: 'map',
@@ -55,6 +64,17 @@
     jz.addEventListener('touchmove',tMove,{passive:false});
     jz.addEventListener('touchend',tEnd); jz.addEventListener('touchcancel',tEnd);
 
+    // "Oko" — drž a táhni = otoč kameru (koukni do jiné ulice); ťukni = srovnat na sever
+    const eye = document.getElementById('eye');
+    let eyeOn=false, eyeX=0, eyeMoved=0, eyeBase=0;
+    eye.addEventListener('pointerdown', e=>{ eyeOn=true; eyeX=e.clientX; eyeMoved=0; eyeBase=bearing;
+      eye.classList.add('act'); eye.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation(); });
+    eye.addEventListener('pointermove', e=>{ if(!eyeOn)return; const dx=e.clientX-eyeX;
+      eyeMoved=Math.max(eyeMoved,Math.abs(dx)); bearing=eyeBase+dx*0.6; e.preventDefault(); e.stopPropagation(); });
+    const eyeUp = e=>{ if(!eyeOn)return; eyeOn=false; eye.classList.remove('act');
+      if(eyeMoved<6) bearing=0; if(e)e.stopPropagation(); };
+    eye.addEventListener('pointerup', eyeUp); eye.addEventListener('pointercancel', eyeUp);
+
     // ── Pohyb + honící kamera ─────────────────────────────────
     const SPEED = 11;                            // m/s (běh)
     const MLAT = 111320;
@@ -74,12 +94,16 @@
         ix/=len; iy/=len;
         if(ix>0.1)facing=1; else if(ix<-0.1)facing=-1;
         const d = SPEED*dt;
-        lat += (iy*d)/MLAT;
-        lng += (ix*d)/mlng(lat);
+        // pohyb RELATIVNĚ ke kameře: "nahoru" = kam koukáš (po otočení okem)
+        const th = bearing*Math.PI/180;
+        const east  =  ix*Math.cos(th) + iy*Math.sin(th);
+        const north = -ix*Math.sin(th) + iy*Math.cos(th);
+        lat += (north*d)/MLAT;
+        lng += (east*d)/mlng(lat);
         simmyEl.style.transform = `translate(-50%,-86%) scaleX(${facing})`;
       }
       // kamera sleduje hráče (instantně = plynulé sledování)
-      map.jumpTo({ center:[lng,lat], zoom:ZOOM, pitch:PITCH, bearing:BEARING });
+      map.jumpTo({ center:[lng,lat], zoom:ZOOM, pitch:PITCH, bearing });
       requestAnimationFrame(loop);
     }
     // ── Stylizace: z "mapy" → "kreslená realita" ──────────────
