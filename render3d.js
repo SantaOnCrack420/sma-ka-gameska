@@ -494,8 +494,9 @@
       // — ribbony se v zatáčkách nepotkávají a vznikaly zelené "zuby").
       for (let k = 0; k + 1 < coords.length; k += 2) {
         const vx = coords[k], vz = coords[k + 1];
-        if (widths[1] > 0) junctionSW.push(buildDisc(vx, vz, sidewalkHalf, SW_Y));
-        junctionAS.push(buildDisc(vx, vz, asphaltHalf, AS_Y));
+        // disky o něco větší než pás → překryjí sousedy a pohltí tenké zelené klíny
+        if (widths[1] > 0) junctionSW.push(buildDisc(vx, vz, sidewalkHalf * 1.08, SW_Y));
+        junctionAS.push(buildDisc(vx, vz, asphaltHalf * 1.18, AS_Y));
       }
 
       // Asfalt (užší)
@@ -522,8 +523,7 @@
       const merged = mergeFlat(allSW);
       if (merged) {
         merged.computeVertexNormals();
-        const mat = new THREE.MeshLambertMaterial({ color: 0xb9b3a6,
-          polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+        const mat = new THREE.MeshLambertMaterial({ color: 0xb9b3a6 });
         group.add(new THREE.Mesh(merged, mat));
       }
     }
@@ -537,8 +537,7 @@
       const merged = mergeFlat(mainGeos.concat(mainJunc));
       if (merged) {
         merged.computeVertexNormals();
-        const mat = new THREE.MeshLambertMaterial({ color: 0x454552,
-          polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+        const mat = new THREE.MeshLambertMaterial({ color: 0x454552 });
         group.add(new THREE.Mesh(merged, mat));
       }
     }
@@ -546,8 +545,7 @@
       const merged = mergeFlat(altGeos);
       if (merged) {
         merged.computeVertexNormals();
-        const mat = new THREE.MeshLambertMaterial({ color: 0x9a9286,
-          polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+        const mat = new THREE.MeshLambertMaterial({ color: 0x9a9286 });
         group.add(new THREE.Mesh(merged, mat));
       }
     }
@@ -700,7 +698,7 @@
   const PROP_KINDS = [
     { src: 'assets/props/strom_clean.png',   n: 16, grid: 'tree',   sw: 5, sh: 5.4, y: 2.7, vr: 0.25 },
     { src: 'assets/props/ker_clean.png',     n: 6,  grid: 'tree',   sw: 3, sh: 1.9, y: 0.95, vr: 0.30 },
-    { src: 'assets/props/lavicka_clean.png', n: 3,  grid: 'street', sw: 4, sh: 1.7, y: 0.85, vr: 0.12 },
+    { src: 'assets/props/lavicka_clean.png', n: 3,  grid: 'tree',   sw: 4, sh: 1.7, y: 0.85, vr: 0.12 },
   ];
 
   function buildWorldProps() {
