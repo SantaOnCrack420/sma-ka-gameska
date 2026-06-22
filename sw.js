@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v69';   // bump: odolnější PWA (allSettled install, jen same-origin fetch)
+const CACHE = 'smazak-v70';   // bump: zapečená zem (textura) + 7 nových propů (gen knihovna)
 const FILES = [
   './',
   './index.html',

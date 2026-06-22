@@ -10,6 +10,13 @@
   // false = vypni stíny na slabém mobilu (jinak vše drží)
   const ENABLE_SHADOWS = true;
 
+  // ── Zapečená textura země ────────────────────────────────
+  // true = celá zem (tráva+cesty+voda+zeleň) se upečí do jedné velké canvas textury.
+  // false = původní geometrie (ribbony+polygony) — zachováno jako fallback.
+  const BAKED_GROUND = true;
+  // Rozlišení textury (může se snížit na 2048 pro slabší mobil)
+  const GROUND_RES = 4096;
+
   // ── Konstanty ze světa ───────────────────────────────────
   const PXM = 3.6;          // px / metr (MAP_PXM z mapdata.js)
   const FLOOR_Y = 0;        // podlaha na y=0
@@ -487,6 +494,186 @@
     return new THREE.Mesh(merged, mat);
   }
 
+  // ── buildBakedGround: celá zem do jedné canvas textury ──────────────────────
+  // Kreslí (zdola nahoru): tráva → zelené polygony → voda → chodníky → asfalt → středové čáry.
+  // round lineJoin/lineCap = automaticky čisté křižovatky bez mezer/zubů.
+  function buildBakedGround() {
+    const S = GROUND_RES;
+    // Měřítko world-px → canvas-px
+    const s = S / 4031;
+
+    // Pomocné: world-px → canvas-px
+    function cx(wx) { return wx * s; }
+    function cy(wy) { return wy * s; }
+
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d');
+
+    // ── a) Tráva základ ─────────────────────────────────────
+    g.fillStyle = '#74964f';
+    g.fillRect(0, 0, S, S);
+
+    // Vyšlapané hlínové fleky (seeded, ne Math.random — deterministické pečení)
+    function sr(seed) {
+      const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+      return x - Math.floor(x);
+    }
+    const dirt = ['#9c8559', '#8f7a50', '#a89066', '#b09060'];
+    for (let i = 0; i < 60; i++) {
+      g.fillStyle = dirt[i % dirt.length];
+      g.globalAlpha = 0.35 + sr(i * 3.7) * 0.35;
+      const bx = sr(i * 1.1) * S, by = sr(i * 2.3) * S;
+      const rx = (20 + sr(i * 4.5) * 80) * s * PXM;
+      const ry = rx * (0.5 + sr(i * 5.1) * 0.6);
+      const rot = sr(i * 6.3) * Math.PI;
+      g.save();
+      g.translate(bx, by);
+      g.rotate(rot);
+      g.beginPath();
+      g.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+    }
+    g.globalAlpha = 1;
+
+    // Travní šum — tmavší i světlejší tečky/stébla (seeded)
+    for (let i = 0; i < 8000; i++) {
+      const tx = sr(i * 1.7 + 0.3) * S;
+      const ty = sr(i * 2.9 + 0.7) * S;
+      const light = sr(i * 3.1) < 0.5;
+      g.fillStyle = light ? 'rgba(150,180,98,0.45)' : 'rgba(86,120,58,0.50)';
+      const tw = 1 + sr(i * 4.3) * 2;
+      const th = 1 + sr(i * 5.7) * 2;
+      g.fillRect(tx, ty, tw, th);
+    }
+
+    // ── b) Zelené polygony VEC_GREEN ──────────────────────────
+    if (typeof VEC_GREEN !== 'undefined') {
+      const colorMap = { 0: '#5f7350', 1: '#79a85a', 2: '#4f7d3e' };
+      for (const a of VEC_GREEN) {
+        if (!a || a.length < 7) continue;
+        const code = a[0];
+        const col = colorMap[code] !== undefined ? colorMap[code] : '#79a85a';
+        g.fillStyle = col;
+        g.beginPath();
+        g.moveTo(cx(a[1]), cy(a[2]));
+        for (let i = 3; i + 1 < a.length; i += 2) {
+          g.lineTo(cx(a[i]), cy(a[i + 1]));
+        }
+        g.closePath();
+        g.fill();
+      }
+    }
+
+    // ── c) Voda ──────────────────────────────────────────────
+    g.fillStyle = '#4a90c4';
+    g.strokeStyle = '#4a90c4';
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+
+    if (typeof VEC_WATERP !== 'undefined') {
+      for (const a of VEC_WATERP) {
+        if (!a || a.length < 6) continue;
+        g.beginPath();
+        g.moveTo(cx(a[0]), cy(a[1]));
+        for (let i = 2; i + 1 < a.length; i += 2) g.lineTo(cx(a[i]), cy(a[i + 1]));
+        g.closePath();
+        g.fill();
+      }
+    }
+    if (typeof VEC_WATERL !== 'undefined') {
+      // lineWidth = 4.5 m * PXM px/m * s px/worldpx
+      const waterLW = 4.5 * PXM * s;
+      g.lineWidth = waterLW;
+      for (const a of VEC_WATERL) {
+        if (!a || a.length < 4) continue;
+        g.beginPath();
+        g.moveTo(cx(a[0]), cy(a[1]));
+        for (let i = 2; i + 1 < a.length; i += 2) g.lineTo(cx(a[i]), cy(a[i + 1]));
+        g.stroke();
+      }
+    }
+
+    // ── d) Cesty — 3 průchody ─────────────────────────────────
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+
+    if (typeof VEC_ROADS !== 'undefined') {
+      // ROAD_WIDTHS[code] = [asfalt_m, chodník_m_každá_strana]
+      const RW = {
+        '2':  [11,   3],
+        '1':  [7,    2.2],
+        '0':  [4.5,  1.3],
+        '-1': [2.4,  0],
+      };
+
+      // d1) Chodníky (jen kde chodník > 0)
+      g.strokeStyle = '#b9b3a6';
+      for (const a of VEC_ROADS) {
+        if (!a || a.length < 5) continue;
+        const code = String(a[0]);
+        const widths = RW[code] || RW['0'];
+        const sw = widths[1];
+        if (sw <= 0) continue;
+        const totalW = (widths[0] + 2 * sw) * PXM * s;
+        g.lineWidth = totalW;
+        g.beginPath();
+        g.moveTo(cx(a[1]), cy(a[2]));
+        for (let i = 3; i + 1 < a.length; i += 2) g.lineTo(cx(a[i]), cy(a[i + 1]));
+        g.stroke();
+      }
+
+      // d2) Asfalt
+      for (const a of VEC_ROADS) {
+        if (!a || a.length < 5) continue;
+        const code = String(a[0]);
+        const cls = parseInt(code) || 0;
+        const widths = RW[code] || RW['0'];
+        g.strokeStyle = (cls < 0) ? '#9a9286' : '#454552';
+        g.lineWidth = widths[0] * PXM * s;
+        g.beginPath();
+        g.moveTo(cx(a[1]), cy(a[2]));
+        for (let i = 3; i + 1 < a.length; i += 2) g.lineTo(cx(a[i]), cy(a[i + 1]));
+        g.stroke();
+      }
+
+      // d3) Středová přerušovaná čára (jen třídy >= 1)
+      g.strokeStyle = '#d8d2b8';
+      g.lineWidth = 0.3 * PXM * s;
+      const dashLen = 3 * PXM * s;
+      const gapLen = 4.5 * PXM * s;
+      g.setLineDash([dashLen, gapLen]);
+      for (const a of VEC_ROADS) {
+        if (!a || a.length < 5) continue;
+        const cls = parseInt(String(a[0])) || 0;
+        if (cls < 1) continue;
+        g.beginPath();
+        g.moveTo(cx(a[1]), cy(a[2]));
+        for (let i = 3; i + 1 < a.length; i += 2) g.lineTo(cx(a[i]), cy(a[i + 1]));
+        g.stroke();
+      }
+      g.setLineDash([]);
+    }
+
+    // ── Vytvoř Three.js texturu z canvasu ──────────────────────
+    const tex = new THREE.CanvasTexture(c);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    tex.generateMipmaps = true;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.needsUpdate = true;
+
+    // ── Rovina pokrývající celý svět ──────────────────────────
+    const geo = new THREE.PlaneGeometry(FLOOR_W, FLOOR_H);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshLambertMaterial({ map: tex });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(FLOOR_W / 2, FLOOR_Y, FLOOR_H / 2);
+    if (ENABLE_SHADOWS) mesh.receiveShadow = true;
+    console.log('[R3D] buildBakedGround OK (' + GROUND_RES + 'px textura)');
+    return mesh;
+  }
+
   // ── Silnice ───────────────────────────────────────────────
   // Šířky [asfalt_m, chodník_m_každá_strana]:
   const ROAD_WIDTHS = {
@@ -774,10 +961,20 @@
 
   // Jen vyříznuté čisté props (strom_clean/ker_clean/lavicka_clean z rozbitých
   // slepenců). Lampa nemá čistý zdroj → vynechána.
+  // sh = výška v metrech, sw = sh * (poměr stran š/v z ořezu). Generované props
+  // jsou v assets/props/gen/ (knihovna), poměry změřené po ořezu.
   const PROP_KINDS = [
-    { src: 'assets/props/strom_clean.png',   n: 16, grid: 'tree',   sw: 5, sh: 5.4, y: 2.7, vr: 0.25 },
-    { src: 'assets/props/ker_clean.png',     n: 6,  grid: 'tree',   sw: 3, sh: 1.9, y: 0.95, vr: 0.30 },
-    { src: 'assets/props/lavicka_clean.png', n: 3,  grid: 'tree',   sw: 4, sh: 1.7, y: 0.85, vr: 0.12 },
+    // Na zeleni (grid 'tree')
+    { src: 'assets/props/strom_clean.png',   n: 14, grid: 'tree',   sw: 5.0,  sh: 5.4, y: 2.7,  vr: 0.25 },
+    { src: 'assets/props/gen/ker.png',       n: 7,  grid: 'tree',   sw: 2.9,  sh: 2.0, y: 1.0,  vr: 0.28 },
+    { src: 'assets/props/gen/trava.png',     n: 18, grid: 'tree',   sw: 1.27, sh: 1.3, y: 0.65, vr: 0.30 },
+    { src: 'assets/props/gen/kytky.png',     n: 9,  grid: 'tree',   sw: 1.1,  sh: 0.9, y: 0.45, vr: 0.25 },
+    // Podél cest (grid 'street')
+    { src: 'assets/props/gen/lampa.png',     n: 8,  grid: 'street', sw: 1.66, sh: 6.0, y: 3.0,  vr: 0.06 },
+    { src: 'assets/props/lavicka_clean.png', n: 4,  grid: 'street', sw: 4.0,  sh: 1.7, y: 0.85, vr: 0.10 },
+    { src: 'assets/props/gen/kos.png',       n: 3,  grid: 'street', sw: 1.04, sh: 1.4, y: 0.7,  vr: 0.08 },
+    { src: 'assets/props/gen/popelnice.png', n: 3,  grid: 'street', sw: 0.93, sh: 1.3, y: 0.65, vr: 0.08 },
+    { src: 'assets/props/gen/zastavka.png',  n: 2,  grid: 'street', sw: 3.9,  sh: 3.2, y: 1.6,  vr: 0.05 },
   ];
 
   function buildWorldProps() {
@@ -1133,24 +1330,30 @@
     setupFog(scene);
     setupLights(scene);
 
-    // Podlaha
-    scene.add(buildFloor());
+    // Podlaha + detail země
+    if (BAKED_GROUND) {
+      // Zapečená textura: tráva + zeleň + voda + cesty v jedné rovině → čisté křižovatky
+      scene.add(buildBakedGround());
+    } else {
+      // Původní geometrie (fallback pro ladění)
+      scene.add(buildFloor());
 
-    // Detail země (silnice, zeleň, voda, koleje) — pod budovami
-    const greenMesh = buildGreen();
-    if (greenMesh) scene.add(greenMesh);
+      const greenMesh = buildGreen();
+      if (greenMesh) scene.add(greenMesh);
 
-    const waterMesh = buildWater();
-    if (waterMesh) scene.add(waterMesh);
+      const waterMesh = buildWater();
+      if (waterMesh) scene.add(waterMesh);
 
+      const roadsMesh = buildRoads();
+      if (roadsMesh) {
+        if (ENABLE_SHADOWS) roadsMesh.traverse(m => { if (m.isMesh) m.receiveShadow = true; });
+        scene.add(roadsMesh);
+      }
+    }
+
+    // Koleje zůstanou jako geometrie i v BAKED_GROUND módu
     const railMesh = buildRail();
     if (railMesh) scene.add(railMesh);
-
-    const roadsMesh = buildRoads();
-    if (roadsMesh) {
-      if (ENABLE_SHADOWS) roadsMesh.traverse(m => { if (m.isMesh) m.receiveShadow = true; });
-      scene.add(roadsMesh);
-    }
 
     // Budovy
     const cityMesh = buildCityMesh();
