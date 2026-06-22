@@ -44,7 +44,7 @@
     const map = new maplibregl.Map({
       container: 'map',
       style: 'https://tiles.openfreemap.org/styles/liberty',
-      center: SPAWN, zoom: ZOOM, pitch: PITCH, bearing: BEARING, maxPitch: 75,
+      center: SPAWN, zoom: ZOOM, pitch: PITCH, bearing: bearing, maxPitch: 75,
       interactive: false,                        // kameru řídíme my (honící), ne uživatel
       attributionControl: true,
     });
