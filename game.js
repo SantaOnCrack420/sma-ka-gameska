@@ -399,7 +399,7 @@ function startGame() {
   player.vx = 0; player.vy = 0; player.boostT = 0;
   updateCam();
   if (COMBAT) { for (let i = 0; i < 5; i++) spawnBag(); }
-  for (let i = 0; i < 20; i++) spawnNpc();   // chodci po ulicích
+  for (let i = 0; i < 12; i++) spawnNpc();   // chodci po ulicích (zbytek doplní loop)
   showHud(true);
   updateHud();
   setMusicVol();   // ztlum hudbu na 50 %
@@ -462,7 +462,7 @@ const ENEMY_NPC_CHANCE = 0.25;
 const NPC_CIVILIAN_COUNT = 11;   // indexy 0-10 v render3d NPC_DEFS (civils)
 const NPC_ENEMY_COUNT    = 4;    // indexy 11-14 v render3d NPC_DEFS (enemy walk)
 function spawnNpc() {
-  const p = randWalkableNear(180, 820);   // okolo hráče, ne přes celou mapu
+  const p = randWalkableNear(250, 1050);   // okolo hráče, rozprostřené (ne mačkat na jednu hromadu)
   if (!p) return;
   const isEnemy = Math.random() < ENEMY_NPC_CHANCE;
   const typeIdx = isEnemy
@@ -667,8 +667,8 @@ function update() {
     n.t += 0.02;
     // Recyklace: NPC který odešel daleko z dohledu se přesune zpět do okolí
     // hráče (mutace na místě — nesmí se přealokovat pole kvůli window.npcs).
-    if (wdist(n.wx, n.wy, player.wx, player.wy) > 1150) {
-      const rp = randWalkableNear(650, 950);
+    if (wdist(n.wx, n.wy, player.wx, player.wy) > 1500) {
+      const rp = randWalkableNear(750, 1150);
       if (rp) { n.wx = rp.wx; n.wy = rp.wy; n.dir = Math.random()*Math.PI*2; n.agro = false; }
     }
     if (n.role === 'enemy') {
@@ -708,7 +708,7 @@ function update() {
       if (!isSolidAt(n.wx, nny)) n.wy = nny; else { n.dir += Math.PI*0.4; n.vy = 0; }
     }
   }
-  while (npcs.length < 28) spawnNpc();
+  while (npcs.length < 15) spawnNpc();
 
   // --- cogani (vlny — vždy honí hráče) ---
   if (hurtCd > 0) hurtCd--;

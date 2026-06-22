@@ -643,10 +643,10 @@
   }
 
   const PROP_KINDS = [
-    { src: 'assets/props/strom.png',   n: 32, grid: 'tree',   sw: 5.5, sh: 10, y: 5.0,  vr: 0.25 },
-    { src: 'assets/props/ker.png',     n: 14, grid: 'tree',   sw: 3.2, sh: 3.2, y: 1.6, vr: 0.30 },
-    { src: 'assets/props/lampa.png',   n: 12, grid: 'street', sw: 1.8, sh: 7,  y: 3.5,  vr: 0.08 },
-    { src: 'assets/props/lavicka.png', n: 10, grid: 'street', sw: 5,   sh: 2.4, y: 1.2, vr: 0.12 },
+    { src: 'assets/props/strom.png',   n: 16, grid: 'tree',   sw: 5.5, sh: 10, y: 5.0,  vr: 0.25 },
+    { src: 'assets/props/ker.png',     n: 6,  grid: 'tree',   sw: 3.2, sh: 3.2, y: 1.6, vr: 0.30 },
+    { src: 'assets/props/lampa.png',   n: 5,  grid: 'street', sw: 1.8, sh: 7,  y: 3.5,  vr: 0.08 },
+    { src: 'assets/props/lavicka.png', n: 3,  grid: 'street', sw: 5,   sh: 2.4, y: 1.2, vr: 0.12 },
   ];
 
   function buildWorldProps() {
@@ -692,7 +692,7 @@
     if (!propPool.length) return;
     if (_propTick++ % 8 !== 0) return;   // throttle — stačí 7–8× za sekundu
     const px = wx2m(pwx), pz = wy2m(pwy);
-    const NEAR = 16, FAR = 155;          // m — drž props v okolí hráče
+    const NEAR = 18, FAR = 210;          // m — props rozprostřené v širším okolí (řidší)
     const occupied = new Set();
     for (const p of propPool) if (p.candKey) occupied.add(p.candKey);
     for (const p of propPool) {

@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v59';   // bump: props streaming (stromy/lampy všude), vendor static, ostřejší sprity, zoom
+const CACHE = 'smazak-v60';   // bump: snížená hustota NPC (28→15) i props (68→30), víc rozprostřené
 const FILES = [
   './',
   './index.html',
