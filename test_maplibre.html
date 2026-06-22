@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>TEST: MapLibre engine — Těšín 3D</title>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+  <style>
+    html,body{margin:0;height:100%;background:#1a1a2e;overflow:hidden;font-family:system-ui,sans-serif}
+    #map{position:absolute;inset:0}
+    #info{position:fixed;left:8px;top:8px;z-index:5;background:rgba(8,8,16,.82);color:#fff;
+      padding:10px 12px;border:2px solid #ffd23f;border-radius:10px;max-width:78%;font-size:13px;line-height:1.45}
+    #info b{color:#ffd23f}
+    #err{position:fixed;left:8px;bottom:8px;z-index:5;color:#ff6b6b;font:12px monospace;background:#000a;padding:4px 8px;border-radius:6px}
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="info">
+    <b>TEST jiného enginu (MapLibre)</b><br>
+    Reálný 3D Těšín. <b>Táhni</b> = posun · <b>dva prsty</b> = otáčení + náklon · <b>štípni</b> = zoom.<br>
+    Takhle by vypadal/choval se „pro" mapový engine. (Není to hra — chybí Šimmy/NPC/gameplay.)
+  </div>
+  <div id="err"></div>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script>
+    const show = m => { document.getElementById('err').textContent = m; };
+    try {
+      const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://tiles.openfreemap.org/styles/liberty',
+        center: [18.6285, 49.7464],   // Český Těšín
+        zoom: 16,
+        pitch: 62,          // náklon kamery (3D pohled)
+        bearing: -18,
+        maxPitch: 80,
+        attributionControl: true,
+      });
+      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+
+      map.on('load', () => {
+        // Pojistka: když styl nemá 3D budovy, dolož extruzi z OpenMapTiles dat
+        if (!map.getLayer('building-3d') && !map.getLayer('building-top')) {
+          try {
+            map.addLayer({
+              id: 'tst-3d-buildings', source: 'openmaptiles', 'source-layer': 'building',
+              type: 'fill-extrusion', minzoom: 14,
+              paint: {
+                'fill-extrusion-color': '#c9b79c',
+                'fill-extrusion-height': ['coalesce', ['get','render_height'], ['get','height'], 9],
+                'fill-extrusion-base':   ['coalesce', ['get','render_min_height'], ['get','min_height'], 0],
+                'fill-extrusion-opacity': 0.92,
+              }
+            });
+          } catch (e) { show('extruze: ' + e.message); }
+        }
+        // značka kde by stál hráč
+        new maplibregl.Marker({ color: '#ff3b3b' }).setLngLat([18.6285, 49.7464]).addTo(map);
+      });
+      map.on('error', e => show('map error: ' + (e && e.error && e.error.message || 'neznámá')));
+    } catch (e) { show('init: ' + e.message); }
+  </script>
+</body>
+</html>
