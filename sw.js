@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v63';   // bump: jen ČISTÉ assety (rozbité slepence vyřazeny) — konec "psů a davů"
+const CACHE = 'smazak-v64';   // bump: cesty — disky na každém vrcholu (mezery) + výškové vrstvy (blikání)
 const FILES = [
   './',
   './index.html',

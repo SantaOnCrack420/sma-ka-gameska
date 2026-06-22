@@ -319,9 +319,9 @@
       const coords = pxCoordsToM(a, true);
       const geo = buildPolygon(coords);
       if (!geo) continue;
-      // Posuň Y nahoru (z-fighting: zeleň nejníž)
+      // Posuň Y nahoru (z-fighting: zeleň nejníž, ale nad podlahou)
       const pos = geo.attributes.position.array;
-      for (let i = 1; i < pos.length; i += 3) pos[i] = 0.02;
+      for (let i = 1; i < pos.length; i += 3) pos[i] = 0.05;
       geo.attributes.position.needsUpdate = true;
       if (!byColor[color]) byColor[color] = [];
       byColor[color].push(geo);
@@ -416,6 +416,9 @@
     const asphaltGeos  = [];
     const junctionSW   = [];
     const junctionAS   = [];
+    // Výškové vrstvy s VELKÝM rozestupem → konec z-fightingu (blikání):
+    // zeleň 0.05 < chodník 0.18 < asfalt 0.34. Disky ve stejné výšce jako jejich pás.
+    const SW_Y = 0.18, AS_Y = 0.34;
 
     for (const a of VEC_ROADS) {
       if (!a || a.length < 5) continue;
@@ -432,28 +435,26 @@
         const geoSW = buildRibbon(coords, sidewalkHalf);
         if (geoSW) {
           const pos = geoSW.attributes.position.array;
-          for (let i = 1; i < pos.length; i += 3) pos[i] = 0.07;
+          for (let i = 1; i < pos.length; i += 3) pos[i] = SW_Y;
           geoSW.attributes.position.needsUpdate = true;
           sidewalkGeos.push(geoSW);
         }
       }
 
-      // Junction discs na endpoints (zaplnění mezer křižovatek)
-      const n = coords.length;
-      const sx = coords[0], sz = coords[1], ex = coords[n-2], ez = coords[n-1];
-      if (widths[1] > 0) {
-        junctionSW.push(buildDisc(sx, sz, sidewalkHalf, 0.07));
-        junctionSW.push(buildDisc(ex, ez, sidewalkHalf, 0.07));
+      // Disky na KAŽDÉM vrcholu trasy (záplata mezer v ohybech i na křižovatkách
+      // — ribbony se v zatáčkách nepotkávají a vznikaly zelené "zuby").
+      for (let k = 0; k + 1 < coords.length; k += 2) {
+        const vx = coords[k], vz = coords[k + 1];
+        if (widths[1] > 0) junctionSW.push(buildDisc(vx, vz, sidewalkHalf, SW_Y));
+        junctionAS.push(buildDisc(vx, vz, asphaltHalf, AS_Y));
       }
-      junctionAS.push(buildDisc(sx, sz, asphaltHalf, 0.09));
-      junctionAS.push(buildDisc(ex, ez, asphaltHalf, 0.09));
 
       // Asfalt (užší)
       const asphaltColor = (parseInt(code) < 0) ? 0x9a9286 : 0x454552;
       const geoAS = buildRibbon(coords, asphaltHalf);
       if (geoAS) {
         const pos = geoAS.attributes.position.array;
-        for (let i = 1; i < pos.length; i += 3) pos[i] = 0.09;
+        for (let i = 1; i < pos.length; i += 3) pos[i] = AS_Y;
         geoAS.attributes.position.needsUpdate = true;
         // Třídu <0 přidáme do oddělené skupiny pro jinou barvu
         if (parseInt(code) < 0) {
@@ -472,7 +473,8 @@
       const merged = mergeFlat(allSW);
       if (merged) {
         merged.computeVertexNormals();
-        const mat = new THREE.MeshLambertMaterial({ color: 0xb9b3a6 });
+        const mat = new THREE.MeshLambertMaterial({ color: 0xb9b3a6,
+          polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
         group.add(new THREE.Mesh(merged, mat));
       }
     }
@@ -486,7 +488,8 @@
       const merged = mergeFlat(mainGeos.concat(mainJunc));
       if (merged) {
         merged.computeVertexNormals();
-        const mat = new THREE.MeshLambertMaterial({ color: 0x454552 });
+        const mat = new THREE.MeshLambertMaterial({ color: 0x454552,
+          polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
         group.add(new THREE.Mesh(merged, mat));
       }
     }
@@ -494,7 +497,8 @@
       const merged = mergeFlat(altGeos);
       if (merged) {
         merged.computeVertexNormals();
-        const mat = new THREE.MeshLambertMaterial({ color: 0x9a9286 });
+        const mat = new THREE.MeshLambertMaterial({ color: 0x9a9286,
+          polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
         group.add(new THREE.Mesh(merged, mat));
       }
     }
