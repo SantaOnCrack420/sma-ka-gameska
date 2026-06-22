@@ -1059,10 +1059,10 @@
     { src: 'assets/npc/teenager.png',  frames: 1, hMul: 0.93 },   // teenager menší
     { src: 'assets/npc/mama.png',      frames: 1 },
     { src: 'assets/npc/vendor.png',    frames: 1, hMul: 1.05 },   // dělník v oranžové
-    // Enemies (indexy 6–8) — čisté vodorovné pásy fází (bereme 1. snímek)
-    { src: 'assets/enemy/opilec.png',  frames: 3, hMul: 1.02 },
-    { src: 'assets/enemy/somrak.png',  frames: 4 },
-    { src: 'assets/enemy/gauner.png',  frames: 4 },
+    // Enemies (indexy 6–7) — předem ořezaný 1. snímek (frames:1, žádné krájení).
+    // opilec vyřazen (creepy/ošklivý vzhled — David ho nechtěl).
+    { src: 'assets/enemy/gen/somrak.png', frames: 1 },
+    { src: 'assets/enemy/gen/gauner.png', frames: 1 },
   ];
   const MAX_NPC = 75;   // ~5 spritů na typ — při husté zástavbě kolem hráče nedojdou
 

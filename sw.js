@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v70';   // bump: zapečená zem (textura) + 7 nových propů (gen knihovna)
+const CACHE = 'smazak-v71';   // bump: opilec pryč, enemy ořezané frames:1 (konec půl-na-půl)
 const FILES = [
   './',
   './index.html',
