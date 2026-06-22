@@ -256,7 +256,8 @@
   function buildFloor() {
     const geo = new THREE.PlaneGeometry(FLOOR_W, FLOOR_H);
     geo.rotateX(-Math.PI / 2);
-    const mat = new THREE.MeshLambertMaterial({ color: 0x6f9b54 });
+    addPlanarUV(geo);   // tráva dlaždí přes world XZ
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, map: buildGrassTexture() });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(FLOOR_W / 2, FLOOR_Y, FLOOR_H / 2);
     if (ENABLE_SHADOWS) mesh.receiveShadow = true;
@@ -350,6 +351,53 @@
     return out;
   }
 
+  // ── Textura trávy (canvas) — zeleň s odstíny + vyšlapaná hlína ───────────
+  // Plnobarevná (mesh color = bílá), dlaždí se přes world XZ (planární UV).
+  let _grassTex = null;
+  function buildGrassTexture() {
+    if (_grassTex) return _grassTex;
+    const S = 256;
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d');
+    g.fillStyle = '#74964f';              // základ trávy
+    g.fillRect(0, 0, S, S);
+    // hlína / vyšlapané fleky (měkké hnědé blobs)
+    const dirt = ['#9c8559', '#8f7a50', '#a89066'];
+    for (let i = 0; i < 7; i++) {
+      g.fillStyle = dirt[i % dirt.length];
+      g.globalAlpha = 0.5 + Math.random() * 0.3;
+      const x = Math.random() * S, y = Math.random() * S;
+      const r = 14 + Math.random() * 32;
+      g.beginPath(); g.ellipse(x, y, r, r * (0.6 + Math.random() * 0.5), Math.random() * 3, 0, 7); g.fill();
+    }
+    g.globalAlpha = 1;
+    // travní detail — tmavší i světlejší tečky/stébla
+    for (let i = 0; i < 2600; i++) {
+      const x = Math.random() * S, y = Math.random() * S;
+      const light = Math.random() < 0.5;
+      g.fillStyle = light ? 'rgba(150,180,98,0.5)' : 'rgba(86,120,58,0.55)';
+      g.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    _grassTex = tex;
+    return tex;
+  }
+
+  // Planární UV (shora) z world XZ pozic — pro plochou zem; dlaždice po GTILE m.
+  const GTILE = 14;
+  function addPlanarUV(geo) {
+    const pos = geo.attributes.position.array;
+    const cnt = geo.attributes.position.count;
+    const uv = new Float32Array(cnt * 2);
+    for (let i = 0; i < cnt; i++) {
+      uv[i * 2] = pos[i * 3] / GTILE;
+      uv[i * 2 + 1] = pos[i * 3 + 2] / GTILE;
+    }
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  }
+
   // ── Zeleň ────────────────────────────────────────────────
   function buildGreen() {
     if (typeof VEC_GREEN === 'undefined' || VEC_GREEN.length === 0) return null;
@@ -377,11 +425,16 @@
     }
 
     const group = new THREE.Group();
+    const grass = buildGrassTexture();
     for (const [colorHex, geoList] of Object.entries(byColor)) {
       const merged = mergeFlat(geoList);
       if (!merged) continue;
       merged.computeVertexNormals();
-      const mat = new THREE.MeshLambertMaterial({ color: parseInt(colorHex) });
+      addPlanarUV(merged);   // tráva dlaždí přes world XZ
+      // les/hřbitov mírně ztmavíme tintem, tráva = plná (bílá × textura)
+      const tint = (parseInt(colorHex) === 0x4f7d3e) ? 0xb8c2ad
+                 : (parseInt(colorHex) === 0x5f7350) ? 0xcfd2c2 : 0xffffff;
+      const mat = new THREE.MeshLambertMaterial({ color: tint, map: grass });
       group.add(new THREE.Mesh(merged, mat));
     }
     console.log('[R3D] Zeleň OK, skupin barev:', Object.keys(byColor).length);
@@ -1003,8 +1056,8 @@
     sun.position.set(0.6, 1.0, 0.4);   // směr ze SZ dolů (přepíše se v _updateCamera)
     if (ENABLE_SHADOWS) {
       sun.castShadow = true;
-      sun.shadow.mapSize.width  = 1024;
-      sun.shadow.mapSize.height = 1024;
+      sun.shadow.mapSize.width  = 2048;
+      sun.shadow.mapSize.height = 2048;
       sun.shadow.camera.near   = 0.5;
       sun.shadow.camera.far    = 500;
       // Úzký frustum kolem hráče (mapa 1120 m — nelze stínovat celou)
@@ -1137,11 +1190,16 @@
     );
     camera.lookAt(px, 1.0, pz);  // koukej na hráče (mírně nad zemí)
 
-    // Stínová kamera sleduje hráče — frustum ±120 m kolem aktuální pozice
+    // Stínová kamera sleduje hráče, ALE snapnutá na texel mřížku stínové mapy
+    // → stín se nehýbe po sub-texelech, takže přestane "plavat/skákat" při chůzi.
     if (ENABLE_SHADOWS && sun) {
-      sun.target.position.set(px, 0, pz);
-      sun.position.set(px + 60, 100, pz + 40);   // zachovává původní směr slunce
+      const texel = 240 / 2048;   // šířka frusta / rozlišení mapy
+      const sx = Math.round(px / texel) * texel;
+      const sz = Math.round(pz / texel) * texel;
+      sun.target.position.set(sx, 0, sz);
+      sun.position.set(sx + 60, 100, sz + 40);   // zachovává směr slunce
       sun.target.updateMatrixWorld();
+      sun.shadow.camera.updateProjectionMatrix();
     }
   }
 

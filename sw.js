@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v66';   // bump: cesty bez blikání (pryč polygonOffset), props jen na trávě, větší disky
+const CACHE = 'smazak-v67';   // bump: textura trávy + hlína, stíny texel-snap (nebliká), 2048 shadow
 const FILES = [
   './',
   './index.html',
