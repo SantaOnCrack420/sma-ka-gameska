@@ -7,6 +7,36 @@ naráží na NPC chodce i nepřátele, sbírá předměty. Čistě browserová h
 **Live URL:** https://santaoncrack420.github.io/sma-ka-gameska/
 **Repo:** github.com/SantaOnCrack420/sma-ka-gameska (branch: master, push přímo)
 
+---
+## 📌 AKTUÁLNÍ STAV & SMĚR (handoff, naposled 2026-06-22)
+
+**Dvě paralelní větve projektu — POZOR, nepleť si je:**
+
+### A) Stávající hra (custom Three.js) — verze v73, FUNKČNÍ
+`index.html` + `game.js` + `render3d.js`. Co je hotové po dnešní session:
+- **Assety pročištěné**: většina původních PNG byl rozbitý slepenec (víc postav+psi na jednom obrázku, chyba cut_assets.py). Používají se JEN ověřené čisté (viz sekce Assety níž). Nové čisté props z Gemini v `assets/props/gen/` (tráva, keř, kytky, lampa, koš, popelnice, zastávka), originály v `source_props/`. Enemy ořezané na 1. snímek v `assets/enemy/gen/` (somrak, gauner; opilec+vandal vyřazené).
+- **Budovy**: okna (fasádní canvas textura + UV), barvy z hashe (pestré).
+- **Zem (BAKED_GROUND=true)**: tráva/zeleň/voda + POVRCH cest (asfalt+chodník) zapečené do 4096² canvas textury (kulaté spoje = dokonalé křižovatky, žádné blikání). Bílé čáry = tenká geometrie navrch (`buildRoadMarkings`). Props maska (`isOnRoad`/`isOnAsphalt`) drží props mimo cestu. iOS Safari limit canvasu = 4096².
+- **NPC**: spawn kolem hráče + recyklace (ne přes celou mapu), čisté single-frame sprity, Šimmy silueta přes baráky.
+- **Stíny**: directional + texel-snap (neskáčou), za přepínačem ENABLE_SHADOWS.
+- COMBAT=false (klidná procházka).
+
+### B) 🔭 STRATEGICKÝ SMĚR: migrace na MapLibre (game-mode) — PROTOTYP, rozhodnuto jít touto cestou
+David viděl MapLibre demo a CHCE tím směrem jít (reálná mapa Těšína: ulice, obchody, zastávky, Alza boxy, budovy — vše zadarmo z OpenFreeMap). Prototypy:
+- `test_maplibre.html` — čisté demo enginu (náklon/otáčení).
+- `test_maplibre_game.html` — **HERNÍ režim**: ovladatelný Šimmy (joystick/WASD), honící kamera (jumpTo každý frame), pohyb relativní ke kameře, tlačítko **👁 oko = drž a táhni = otoč pohled** (do jiné ulice). Stylizované teplé 3D budovy + obloha. Šimmy 34px, zoom 18.7, pitch 62.
+- **Snadné na MapLibre**: barevné domy, obloha, props/cedule na reálné POI pozice, popisky zdarma, otáčení kamery.
+- **Těžké na MapLibre (později)**: okna na domech (chce vlastní shader/Three vrstvu), stíny budov (GL JS neumí nativně).
+
+### CO DÁL (až bude čas)
+1. **Billboard vrstva** v MapLibre (Three.js jako Threebox) — Šimmy/NPC/props jako sprity ve 3D, ne placaté markery.
+2. **Umístit cedule obchodů na reálné POI** + mobiliář scatter podél cest.
+3. **Port gameplaye** z game.js (házení smažáků/hranolků, NPC, skóre, kolize) na zeměpisné souřadnice.
+4. **David generuje props** (recept: 512×512, purpurové #FF00FF pozadí, jeden objekt, kreslený styl): kašna, Alza Box, auta, hydrant, semafor, kebab, Kaufland/Lidl/Tesco/Shell cedule… (REÁLNÉ názvy — David je chce, ne parodie). Workflow: David pošle PNG → vyklíčovat purpurovou (největší komponenta, odmaž ✦ vodoznak) → ořez → `assets/props/gen/`.
+
+**Headless ověření** (funguje na geometrii + canvas textury, NE na velké sprite PNG ani MapLibre dlaždice): Windows Chrome přes `file:///C:/temp/...` (viz commity). MapLibre/sprity testuje David na telefonu.
+---
+
 ## Architektura — DVĚ VRSTVY
 
 ```
