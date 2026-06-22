@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v71';   // bump: opilec pryč, enemy ořezané frames:1 (konec půl-na-půl)
+const CACHE = 'smazak-v72';   // bump: hybrid — ostré cesty (geometrie) na textuře trávy + props mimo cestu
 const FILES = [
   './',
   './index.html',

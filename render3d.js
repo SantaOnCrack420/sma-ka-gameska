@@ -41,6 +41,58 @@
   let streetCands = [];       // {x,z} v metrech — podél cest (lampy/lavičky)
   let treeGrid = null, streetGrid = null;
   const PROP_CELL = 80;       // velikost buňky prostorové mřížky (m)
+
+  // Road mask: sada klíčů buněk (rozlišení ROAD_MASK_CELL m) označených jako "na cestě".
+  // Stromy/keře/tráva/kytky v těchto buňkách se přeskakují (padaly na asfalt).
+  const ROAD_MASK_CELL = 4;   // m — rozlišení masky (fine, ~1.1 px při PXM=3.6)
+  let roadMaskSet = null;     // Set<string> buněk
+  function roadMaskKey(x, z) { return Math.floor(x / ROAD_MASK_CELL) + '|' + Math.floor(z / ROAD_MASK_CELL); }
+  // Vzdálenost bodu od úsečky AB (v m)
+  function pointSegDist(px, pz, ax, az, bx, bz) {
+    const dx = bx - ax, dz = bz - az;
+    const lenSq = dx * dx + dz * dz;
+    if (lenSq < 1e-8) return Math.hypot(px - ax, pz - az);
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / lenSq));
+    return Math.hypot(px - ax - t * dx, pz - az - t * dz);
+  }
+  // Šířky cest (asfalt_m, chodník_m_každá_strana) — stejné jako v buildRoads
+  const ROAD_WIDTHS_MASK = { '2': [11, 3], '1': [7, 2.2], '0': [4.5, 1.3], '-1': [2.4, 0] };
+  function buildRoadMask() {
+    roadMaskSet = new Set();
+    if (typeof VEC_ROADS === 'undefined') return;
+    for (const a of VEC_ROADS) {
+      if (!a || a.length < 5) continue;
+      const code = String(a[0]);
+      const widths = ROAD_WIDTHS_MASK[code] || ROAD_WIDTHS_MASK['0'];
+      // Vyloučovací poloměr = polovina asfaltu + chodník + 1.5 m rezerva
+      const excl = widths[0] / 2 + widths[1] + 1.5;
+      const n = Math.floor((a.length - 1) / 2);
+      // Pro každý segment cesty označíme buňky v excl okolí
+      for (let seg = 0; seg < n - 1; seg++) {
+        const ax = wx2m(a[1 + seg * 2]),     az = wy2m(a[2 + seg * 2]);
+        const bx = wx2m(a[1 + (seg + 1) * 2]), bz = wy2m(a[2 + (seg + 1) * 2]);
+        // AABB segmentu + excl okraj
+        const minX = Math.min(ax, bx) - excl, maxX = Math.max(ax, bx) + excl;
+        const minZ = Math.min(az, bz) - excl, maxZ = Math.max(az, bz) + excl;
+        const c0x = Math.floor(minX / ROAD_MASK_CELL), c1x = Math.floor(maxX / ROAD_MASK_CELL);
+        const c0z = Math.floor(minZ / ROAD_MASK_CELL), c1z = Math.floor(maxZ / ROAD_MASK_CELL);
+        for (let cx = c0x; cx <= c1x; cx++) {
+          for (let cz = c0z; cz <= c1z; cz++) {
+            // Střed buňky
+            const mx = (cx + 0.5) * ROAD_MASK_CELL, mz = (cz + 0.5) * ROAD_MASK_CELL;
+            if (pointSegDist(mx, mz, ax, az, bx, bz) <= excl) {
+              roadMaskSet.add(cx + '|' + cz);
+            }
+          }
+        }
+      }
+    }
+    console.log('[R3D] Road mask buněk:', roadMaskSet.size);
+  }
+  function isOnRoad(x, z) {
+    if (!roadMaskSet) return false;
+    return roadMaskSet.has(roadMaskKey(x, z));
+  }
   function seededR(seed) {
     const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
     return x - Math.floor(x);
@@ -595,67 +647,6 @@
       }
     }
 
-    // ── d) Cesty — 3 průchody ─────────────────────────────────
-    g.lineCap = 'round';
-    g.lineJoin = 'round';
-
-    if (typeof VEC_ROADS !== 'undefined') {
-      // ROAD_WIDTHS[code] = [asfalt_m, chodník_m_každá_strana]
-      const RW = {
-        '2':  [11,   3],
-        '1':  [7,    2.2],
-        '0':  [4.5,  1.3],
-        '-1': [2.4,  0],
-      };
-
-      // d1) Chodníky (jen kde chodník > 0)
-      g.strokeStyle = '#b9b3a6';
-      for (const a of VEC_ROADS) {
-        if (!a || a.length < 5) continue;
-        const code = String(a[0]);
-        const widths = RW[code] || RW['0'];
-        const sw = widths[1];
-        if (sw <= 0) continue;
-        const totalW = (widths[0] + 2 * sw) * PXM * s;
-        g.lineWidth = totalW;
-        g.beginPath();
-        g.moveTo(cx(a[1]), cy(a[2]));
-        for (let i = 3; i + 1 < a.length; i += 2) g.lineTo(cx(a[i]), cy(a[i + 1]));
-        g.stroke();
-      }
-
-      // d2) Asfalt
-      for (const a of VEC_ROADS) {
-        if (!a || a.length < 5) continue;
-        const code = String(a[0]);
-        const cls = parseInt(code) || 0;
-        const widths = RW[code] || RW['0'];
-        g.strokeStyle = (cls < 0) ? '#9a9286' : '#454552';
-        g.lineWidth = widths[0] * PXM * s;
-        g.beginPath();
-        g.moveTo(cx(a[1]), cy(a[2]));
-        for (let i = 3; i + 1 < a.length; i += 2) g.lineTo(cx(a[i]), cy(a[i + 1]));
-        g.stroke();
-      }
-
-      // d3) Středová přerušovaná čára (jen třídy >= 1)
-      g.strokeStyle = '#d8d2b8';
-      g.lineWidth = 0.3 * PXM * s;
-      const dashLen = 3 * PXM * s;
-      const gapLen = 4.5 * PXM * s;
-      g.setLineDash([dashLen, gapLen]);
-      for (const a of VEC_ROADS) {
-        if (!a || a.length < 5) continue;
-        const cls = parseInt(String(a[0])) || 0;
-        if (cls < 1) continue;
-        g.beginPath();
-        g.moveTo(cx(a[1]), cy(a[2]));
-        for (let i = 3; i + 1 < a.length; i += 2) g.lineTo(cx(a[i]), cy(a[i + 1]));
-        g.stroke();
-      }
-      g.setLineDash([]);
-    }
-
     // ── Vytvoř Three.js texturu z canvasu ──────────────────────
     const tex = new THREE.CanvasTexture(c);
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -931,12 +922,18 @@
     return m;
   }
   function buildPropCandidates() {
+    // Nejdřív postav road mask (aby šla použít při filtraci treeCands)
+    buildRoadMask();
+
     // Stromy/keře → vrcholy zelených polygonů (parky, trávníky)
+    // Přeskočíme body které padají na road mask (na asfalt/chodník)
     if (typeof VEC_GREEN !== 'undefined') {
       for (const a of VEC_GREEN) {
         if (!a || a.length < 7) continue;
-        for (let i = 1; i + 1 < a.length; i += 2)
-          treeCands.push({ x: wx2m(a[i]), z: wy2m(a[i + 1]) });
+        for (let i = 1; i + 1 < a.length; i += 2) {
+          const x = wx2m(a[i]), z = wy2m(a[i + 1]);
+          if (!isOnRoad(x, z)) treeCands.push({ x, z });
+        }
       }
     }
     // Lampy/lavičky → kolmý offset od segmentů cest (na chodník, ne doprostřed)
@@ -994,7 +991,8 @@
   }
 
   // Najdi volný kandidát v prstenci [near, far] kolem hráče (z mřížky)
-  function pickCandidate(cands, grid, px, pz, near, far, occupied, gname) {
+  // isTreeGrid=true → navíc zamítne body padající na road mask (stromy v asfaltu)
+  function pickCandidate(cands, grid, px, pz, near, far, occupied, gname, isTreeGrid) {
     if (!grid || !cands.length) return -1;
     const cx = Math.floor(px / PROP_CELL), cz = Math.floor(pz / PROP_CELL);
     const span = Math.ceil(far / PROP_CELL);
@@ -1007,6 +1005,8 @@
           const c = cands[idx];
           const d = Math.hypot(c.x - px, c.z - pz);
           if (d < near || d > far) continue;
+          // Stromy/keře/tráva/kytky nesmí stát na cestě
+          if (isTreeGrid && isOnRoad(c.x, c.z)) continue;
           const rr = seededR(idx * 3.1);  // náhodný výběr → rozmanitost
           if (rr > bestRand) { bestRand = rr; best = idx; }
         }
@@ -1032,7 +1032,7 @@
       const tree = p.kind.grid === 'tree';
       const cands = tree ? treeCands : streetCands;
       const grid = tree ? treeGrid : streetGrid;
-      const idx = pickCandidate(cands, grid, px, pz, NEAR, FAR, occupied, p.kind.grid);
+      const idx = pickCandidate(cands, grid, px, pz, NEAR, FAR, occupied, p.kind.grid, tree);
       if (idx < 0) { p.sprite.visible = false; continue; }
       const key = p.kind.grid + ':' + idx;
       occupied.add(key); p.candKey = key;
@@ -1332,8 +1332,14 @@
 
     // Podlaha + detail země
     if (BAKED_GROUND) {
-      // Zapečená textura: tráva + zeleň + voda + cesty v jedné rovině → čisté křižovatky
+      // Zapečená textura: tráva + zeleň + voda → měkká zem
       scene.add(buildBakedGround());
+      // Cesty jako geometrie navrch → vždy ostré, nezávislé na rozlišení textury
+      const roadsMeshBaked = buildRoads();
+      if (roadsMeshBaked) {
+        if (ENABLE_SHADOWS) roadsMeshBaked.traverse(m => { if (m.isMesh) m.receiveShadow = true; });
+        scene.add(roadsMeshBaked);
+      }
     } else {
       // Původní geometrie (fallback pro ladění)
       scene.add(buildFloor());
