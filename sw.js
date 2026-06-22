@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v61';   // bump: NPC = 1 snímek (ne celý spritesheet), vandal vyřazen
+const CACHE = 'smazak-v62';   // bump: Šimmy se načítá první (ne až za NPC/props) → naběhne hned
 const FILES = [
   './',
   './index.html',

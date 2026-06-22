@@ -1028,18 +1028,8 @@
     const cityMesh = buildCityMesh();
     if (cityMesh) scene.add(cityMesh);
 
-    // POI billboardy (obchody/podniky)
-    poiGroup = buildPOI();
-    if (poiGroup) scene.add(poiGroup);
-
-    // World props (stromy, keře, lampy, lavičky)
-    propsGroup = buildWorldProps();
-    scene.add(propsGroup);
-
-    // NPC sprite pool (chodci)
-    buildNpcPool();
-
-    // Šimmy billboard
+    // Šimmy billboard PRVNÍ — ať se jeho textura načte dřív než NPC/props
+    // (jinak je ve frontě poslední a hráč naběhne až za pár vteřin).
     simmySprite = buildSimmySprite();
     simmySprite.position.set(
       wx2m(typeof SPAWN_PX !== 'undefined' ? SPAWN_PX[0] : 2012),
@@ -1049,8 +1039,7 @@
     scene.add(simmySprite);
 
     // Šimmy "duch" — silueta viditelná když zaleze ZA barák (GTA X-ray efekt).
-    // Sdílí walkTex (animace se synchronizuje sama), kreslí se jen tam, kde je
-    // něco fyzicky před ním (depthFunc GreaterDepth), v kontrastní barvě.
+    // Sdílí walkTex, kreslí se jen tam, kde je něco fyzicky před ním.
     const ghostMat = new THREE.SpriteMaterial({
       map: walkTex, transparent: true, depthWrite: false,
       depthTest: true, alphaTest: 0.05,
@@ -1062,6 +1051,17 @@
     simmyGhost.position.copy(simmySprite.position);
     simmyGhost.renderOrder = 99;
     scene.add(simmyGhost);
+
+    // POI billboardy (obchody/podniky)
+    poiGroup = buildPOI();
+    if (poiGroup) scene.add(poiGroup);
+
+    // World props (stromy, keře, lampy, lavičky)
+    propsGroup = buildWorldProps();
+    scene.add(propsGroup);
+
+    // NPC sprite pool (chodci) — až po Šimmym, ať má hráč přednost v načítání
+    buildNpcPool();
 
     // Kamera — šikmá GTA
     camera = new THREE.PerspectiveCamera(50, canvas.clientWidth / canvas.clientHeight, 0.5, 800);
