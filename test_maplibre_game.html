@@ -9,7 +9,7 @@
     html,body{margin:0;height:100%;background:#1a1a2e;overflow:hidden;font-family:system-ui,sans-serif;-webkit-user-select:none;user-select:none}
     #map{position:absolute;inset:0}
     /* Šimmy je pevně uprostřed obrazovky (kamera ho sleduje) */
-    #simmy{position:fixed;left:50%;top:50%;width:54px;height:auto;transform:translate(-50%,-86%);
+    #simmy{position:fixed;left:50%;top:50%;width:34px;height:auto;transform:translate(-50%,-86%);
       z-index:4;pointer-events:none;filter:drop-shadow(0 3px 3px rgba(0,0,0,.5))}
     #hud{position:fixed;left:8px;top:8px;z-index:5;background:rgba(8,8,16,.82);color:#fff;
       padding:9px 12px;border:2px solid #ffd23f;border-radius:10px;max-width:80%;font-size:13px;line-height:1.4}
@@ -30,7 +30,7 @@
   try {
     const SPAWN = [18.6285, 49.7464];           // Český Těšín
     let lng = SPAWN[0], lat = SPAWN[1];
-    const PITCH = 55, ZOOM = 18, BEARING = 0;
+    const PITCH = 62, ZOOM = 18.7, BEARING = 0;  // víc 3D + blíž → svět větší vs Šimmy
 
     const map = new maplibregl.Map({
       container: 'map',
@@ -82,7 +82,33 @@
       map.jumpTo({ center:[lng,lat], zoom:ZOOM, pitch:PITCH, bearing:BEARING });
       requestAnimationFrame(loop);
     }
-    map.on('load', ()=>{ new maplibregl.Marker({color:'#ff3b3b',scale:0.5}).setLngLat(SPAWN).addTo(map); requestAnimationFrame(loop); });
+    // ── Stylizace: z "mapy" → "kreslená realita" ──────────────
+    function stylize(){
+      // obloha + atmosféra
+      try { map.setSky({ 'sky-color':'#8fc1ee','horizon-color':'#dfeaf4','fog-color':'#e9eef5',
+        'sky-horizon-blend':0.55,'horizon-fog-blend':0.5 }); } catch(e){}
+      // teplé stylizované 3D budovy (barva podle výšky)
+      const col = ['interpolate',['linear'],
+        ['coalesce',['get','render_height'],['get','height'],8],
+        0,'#ead9c2', 8,'#dcc6a6', 18,'#cdb08c', 35,'#bd9c78', 70,'#a98866'];
+      let done=false;
+      ['building-3d','building-top','building'].forEach(id=>{
+        if(map.getLayer(id)){ try{
+          map.setPaintProperty(id,'fill-extrusion-color',col);
+          map.setPaintProperty(id,'fill-extrusion-opacity',1);
+          map.setPaintProperty(id,'fill-extrusion-vertical-gradient',true);
+          done=true;
+        }catch(e){} }
+      });
+      if(!done){ try{ map.addLayer({ id:'tst-3d', source:'openmaptiles','source-layer':'building',
+        type:'fill-extrusion', minzoom:14, paint:{ 'fill-extrusion-color':col,
+        'fill-extrusion-height':['coalesce',['get','render_height'],['get','height'],9],
+        'fill-extrusion-base':['coalesce',['get','render_min_height'],['get','min_height'],0],
+        'fill-extrusion-opacity':1 } }); }catch(e){} }
+      // teplejší zem (pozadí) ať to není šedá mapa
+      try{ if(map.getLayer('background')) map.setPaintProperty('background','background-color','#cfdcc4'); }catch(e){}
+    }
+    map.on('load', ()=>{ stylize(); new maplibregl.Marker({color:'#ff3b3b',scale:0.45}).setLngLat(SPAWN).addTo(map); requestAnimationFrame(loop); });
   } catch(e){ show('init: '+e.message); }
   </script>
 </body>
