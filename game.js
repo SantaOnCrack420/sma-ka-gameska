@@ -441,6 +441,20 @@ function randWalkable(minDistFromPlayer) {
   }
   return null;
 }
+// Pochozí bod v prstenci [minR, maxR] kolem hráče — drží NPC hustotu v okolí,
+// ne rozházené po celé mapě (jinak vidíš jen pár vzdálených "teček").
+function randWalkableNear(minR, maxR) {
+  for (let tries = 0; tries < 30; tries++) {
+    const ang = Math.random()*Math.PI*2;
+    const r = minR + Math.random()*(maxR - minR);
+    const wx = player.wx + Math.cos(ang)*r;
+    const wy = player.wy + Math.sin(ang)*r;
+    if (wx < 0 || wy < 0 || wx >= WPX || wy >= WPY) continue;
+    if (isSolidAt(wx, wy)) continue;
+    return { wx, wy };
+  }
+  return null;
+}
 function spawnPigeon() {
   const p = randWalkable(160); if (p) pigeons.push({ wx: p.wx, wy: p.wy, t: Math.random()*100, hp: 1 });
 }
@@ -448,7 +462,7 @@ const ENEMY_NPC_CHANCE = 0.25;
 const NPC_CIVILIAN_COUNT = 11;   // indexy 0-10 v render3d NPC_DEFS (civils)
 const NPC_ENEMY_COUNT    = 4;    // indexy 11-14 v render3d NPC_DEFS (enemy walk)
 function spawnNpc() {
-  const p = randWalkable(120);
+  const p = randWalkableNear(180, 820);   // okolo hráče, ne přes celou mapu
   if (!p) return;
   const isEnemy = Math.random() < ENEMY_NPC_CHANCE;
   const typeIdx = isEnemy
@@ -650,6 +664,12 @@ function update() {
   const AGRO_DIST = 130, AGRO_SPD = 0.85, WALK_SPD = 0.5;
   for (const n of npcs) {
     n.t += 0.02;
+    // Recyklace: NPC který odešel daleko z dohledu se přesune zpět do okolí
+    // hráče (mutace na místě — nesmí se přealokovat pole kvůli window.npcs).
+    if (wdist(n.wx, n.wy, player.wx, player.wy) > 1150) {
+      const rp = randWalkableNear(650, 950);
+      if (rp) { n.wx = rp.wx; n.wy = rp.wy; n.dir = Math.random()*Math.PI*2; n.agro = false; }
+    }
     if (n.role === 'enemy') {
       const d = wdist(n.wx, n.wy, player.wx, player.wy);
       n.agro = d < AGRO_DIST;

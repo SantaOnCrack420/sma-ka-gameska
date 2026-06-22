@@ -21,7 +21,7 @@
   function wy2m(wy) { return wy / PXM; }
 
   // ── Stav renderer ───────────────────────────────────────
-  let renderer, scene, camera, simmySprite, sun;
+  let renderer, scene, camera, simmySprite, simmyGhost, sun;
   let initialized = false;
   let propsGroup = null;
   let npcSpritePool = [];
@@ -674,7 +674,7 @@
     { src: 'assets/enemy/somrak.png',    frames: 2 },
     { src: 'assets/enemy/gauner.png',    frames: 4 },
   ];
-  const MAX_NPC = 35;
+  const MAX_NPC = 75;   // ~5 spritů na typ — při husté zástavbě kolem hráče nedojdou
 
   function buildNpcPool() {
     const loader = new THREE.TextureLoader();
@@ -983,6 +983,21 @@
     );
     scene.add(simmySprite);
 
+    // Šimmy "duch" — silueta viditelná když zaleze ZA barák (GTA X-ray efekt).
+    // Sdílí walkTex (animace se synchronizuje sama), kreslí se jen tam, kde je
+    // něco fyzicky před ním (depthFunc GreaterDepth), v kontrastní barvě.
+    const ghostMat = new THREE.SpriteMaterial({
+      map: walkTex, transparent: true, depthWrite: false,
+      depthTest: true, alphaTest: 0.05,
+      color: 0x8fd0ff, opacity: 0.9,
+    });
+    ghostMat.depthFunc = THREE.GreaterDepth;
+    simmyGhost = new THREE.Sprite(ghostMat);
+    simmyGhost.scale.copy(simmySprite.scale);
+    simmyGhost.position.copy(simmySprite.position);
+    simmyGhost.renderOrder = 99;
+    scene.add(simmyGhost);
+
     // Kamera — šikmá GTA
     camera = new THREE.PerspectiveCamera(50, canvas.clientWidth / canvas.clientHeight, 0.5, 800);
     _updateCamera();
@@ -1032,6 +1047,11 @@
       simmySprite.position.set(wx2m(player.wx), 1.65, wy2m(player.wy));
       const moving = (player.vx * player.vx + player.vy * player.vy) > 0.02;
       animateWalk(moving, dt);
+      // Duch kopíruje hráče (poloha + scale po načtení textury)
+      if (simmyGhost) {
+        simmyGhost.position.copy(simmySprite.position);
+        simmyGhost.scale.copy(simmySprite.scale);
+      }
     }
 
     // Aktualizuj kameru
