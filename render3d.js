@@ -44,8 +44,9 @@
 
   // Road mask: sada klíčů buněk (rozlišení ROAD_MASK_CELL m) označených jako "na cestě".
   // Stromy/keře/tráva/kytky v těchto buňkách se přeskakují (padaly na asfalt).
-  const ROAD_MASK_CELL = 4;   // m — rozlišení masky (fine, ~1.1 px při PXM=3.6)
-  let roadMaskSet = null;     // Set<string> buněk
+  const ROAD_MASK_CELL = 3;   // m — jemnější rozlišení (bylo 4) → méně trávy na asfaltu
+  let roadMaskSet = null;     // Set<string> buněk — plná road maska (asfalt+chodník)
+  let asphaltMaskSet = null;  // Set<string> buněk — jen asfalt (pro street props)
   function roadMaskKey(x, z) { return Math.floor(x / ROAD_MASK_CELL) + '|' + Math.floor(z / ROAD_MASK_CELL); }
   // Vzdálenost bodu od úsečky AB (v m)
   function pointSegDist(px, pz, ax, az, bx, bz) {
@@ -59,39 +60,47 @@
   const ROAD_WIDTHS_MASK = { '2': [11, 3], '1': [7, 2.2], '0': [4.5, 1.3], '-1': [2.4, 0] };
   function buildRoadMask() {
     roadMaskSet = new Set();
+    asphaltMaskSet = new Set();
     if (typeof VEC_ROADS === 'undefined') return;
     for (const a of VEC_ROADS) {
       if (!a || a.length < 5) continue;
       const code = String(a[0]);
       const widths = ROAD_WIDTHS_MASK[code] || ROAD_WIDTHS_MASK['0'];
-      // Vyloučovací poloměr = polovina asfaltu + chodník + 1.5 m rezerva
-      const excl = widths[0] / 2 + widths[1] + 1.5;
+      const asphaltHalf = widths[0] / 2;
+      // Plná maska: asfalt + chodník + 1.5 m rezerva
+      const exclFull = asphaltHalf + widths[1] + 1.5;
+      // Asfaltová maska: jen asfalt + 0.4 m rezerva
+      const exclAsph = asphaltHalf + 0.4;
       const n = Math.floor((a.length - 1) / 2);
       // Pro každý segment cesty označíme buňky v excl okolí
       for (let seg = 0; seg < n - 1; seg++) {
         const ax = wx2m(a[1 + seg * 2]),     az = wy2m(a[2 + seg * 2]);
         const bx = wx2m(a[1 + (seg + 1) * 2]), bz = wy2m(a[2 + (seg + 1) * 2]);
-        // AABB segmentu + excl okraj
-        const minX = Math.min(ax, bx) - excl, maxX = Math.max(ax, bx) + excl;
-        const minZ = Math.min(az, bz) - excl, maxZ = Math.max(az, bz) + excl;
+        // AABB segmentu + max(exclFull) okraj
+        const minX = Math.min(ax, bx) - exclFull, maxX = Math.max(ax, bx) + exclFull;
+        const minZ = Math.min(az, bz) - exclFull, maxZ = Math.max(az, bz) + exclFull;
         const c0x = Math.floor(minX / ROAD_MASK_CELL), c1x = Math.floor(maxX / ROAD_MASK_CELL);
         const c0z = Math.floor(minZ / ROAD_MASK_CELL), c1z = Math.floor(maxZ / ROAD_MASK_CELL);
         for (let cx = c0x; cx <= c1x; cx++) {
           for (let cz = c0z; cz <= c1z; cz++) {
             // Střed buňky
             const mx = (cx + 0.5) * ROAD_MASK_CELL, mz = (cz + 0.5) * ROAD_MASK_CELL;
-            if (pointSegDist(mx, mz, ax, az, bx, bz) <= excl) {
-              roadMaskSet.add(cx + '|' + cz);
-            }
+            const d = pointSegDist(mx, mz, ax, az, bx, bz);
+            if (d <= exclFull) roadMaskSet.add(cx + '|' + cz);
+            if (d <= exclAsph) asphaltMaskSet.add(cx + '|' + cz);
           }
         }
       }
     }
-    console.log('[R3D] Road mask buněk:', roadMaskSet.size);
+    console.log('[R3D] Road mask buněk:', roadMaskSet.size, '| Asfalt mask buněk:', asphaltMaskSet.size);
   }
   function isOnRoad(x, z) {
     if (!roadMaskSet) return false;
     return roadMaskSet.has(roadMaskKey(x, z));
+  }
+  function isOnAsphalt(x, z) {
+    if (!asphaltMaskSet) return false;
+    return asphaltMaskSet.has(roadMaskKey(x, z));
   }
   function seededR(seed) {
     const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
@@ -647,6 +656,42 @@
       }
     }
 
+    // ── d) Povrch cest: chodníky + asfalt (BEZ čar — ty jsou geometrie) ────
+    // Kreslíme vždy round lineCap/lineJoin → kulaté spoje na křižovatkách,
+    // žádné zuby ani mezery. Pořadí: nejprv chodník (širší), pak asfalt navrch.
+    if (typeof VEC_ROADS !== 'undefined') {
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      // Šířky (asfalt_m, chodník_m_každá_strana) — musí odpovídat ROAD_WIDTHS
+      const RW = { '2': [11, 3], '1': [7, 2.2], '0': [4.5, 1.3], '-1': [2.4, 0] };
+      // Průchod 1: chodníky (jen kde chodník > 0)
+      for (const a of VEC_ROADS) {
+        if (!a || a.length < 5) continue;
+        const code = String(a[0]);
+        const widths = RW[code] || RW['0'];
+        if (widths[1] <= 0) continue;
+        const totalHalf = (widths[0] / 2 + widths[1]);
+        g.strokeStyle = '#b9b3a6';
+        g.lineWidth = totalHalf * 2 * PXM * s;
+        g.beginPath();
+        g.moveTo(cx(a[1]), cy(a[2]));
+        for (let i = 3; i + 1 < a.length; i += 2) g.lineTo(cx(a[i]), cy(a[i + 1]));
+        g.stroke();
+      }
+      // Průchod 2: asfalt navrch
+      for (const a of VEC_ROADS) {
+        if (!a || a.length < 5) continue;
+        const code = String(a[0]); const cls = parseInt(code) || 0;
+        const widths = RW[code] || RW['0'];
+        g.strokeStyle = (cls < 0) ? '#9a9286' : '#454552';
+        g.lineWidth = widths[0] * PXM * s;
+        g.beginPath();
+        g.moveTo(cx(a[1]), cy(a[2]));
+        for (let i = 3; i + 1 < a.length; i += 2) g.lineTo(cx(a[i]), cy(a[i + 1]));
+        g.stroke();
+      }
+    }
+
     // ── Vytvoř Three.js texturu z canvasu ──────────────────────
     const tex = new THREE.CanvasTexture(c);
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -812,6 +857,44 @@
     return group;
   }
 
+  // ── Silniční značení — geometrie bílých čar navrch canvas textury ────────
+  // Používá emitMarking/pushQuad (definovány výše v buildRoads sekci).
+  // LINE_Y > 0 (nad zapečenou rovinou y=0) → ostré čáry bez z-fightingu.
+  function buildRoadMarkings() {
+    if (typeof VEC_ROADS === 'undefined' || VEC_ROADS.length === 0) return null;
+    const LINE_Y = 0.10;          // nad zapečenou rovinou y=0
+    const COL_LINE = 0xd8d2b8;   // světle béžová (bílé čáry)
+    const markVerts = [];
+
+    for (const a of VEC_ROADS) {
+      if (!a || a.length < 5) continue;
+      const code = String(a[0]); const cls = parseInt(code) || 0;
+      const widths = ROAD_WIDTHS[code] || ROAD_WIDTHS['0'];
+      const asphaltHalf = widths[0] / 2;
+      if (cls < 0 || asphaltHalf < 2.2) continue;  // pěšinky bez čar
+      const coords = pxCoordsToM(a, true);
+      if (coords.length < 4) continue;
+
+      // Středová přerušovaná čára
+      emitMarking(coords, 0, 0.16, 3.0, 4.5, LINE_Y, markVerts);
+      // Krajnice jen na širších cestách (cls >= 1)
+      if (cls >= 1) {
+        const edge = asphaltHalf - 0.45;
+        emitMarking(coords,  edge, 0.12, 1, 0, LINE_Y, markVerts);
+        emitMarking(coords, -edge, 0.12, 1, 0, LINE_Y, markVerts);
+      }
+    }
+
+    if (markVerts.length === 0) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(markVerts), 3));
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshLambertMaterial({ color: COL_LINE });
+    const mesh = new THREE.Mesh(geo, mat);
+    console.log('[R3D] Silniční značení OK (' + (markVerts.length / 3 | 0) + ' vrcholů)');
+    return mesh;
+  }
+
   // ── Koleje ────────────────────────────────────────────────
   function buildRail() {
     if (typeof VEC_RAIL === 'undefined' || VEC_RAIL.length === 0) {
@@ -936,18 +1019,25 @@
         }
       }
     }
-    // Lampy/lavičky → kolmý offset od segmentů cest (na chodník, ne doprostřed)
+    // Lampy/lavičky → kolmý offset od segmentů cest (na chodník, ne na asfalt)
+    // Offset je větší → body cílí přímo na chodník (asfalt + chodník šířka)
     if (typeof VEC_ROADS !== 'undefined') {
+      const RW_CANDS = { '2': [11, 3], '1': [7, 2.2], '0': [4.5, 1.3], '-1': [2.4, 0] };
       for (const a of VEC_ROADS) {
         if (!a || a.length < 5) continue;
+        const code = String(a[0]);
+        const widths = RW_CANDS[code] || RW_CANDS['0'];
+        if (widths[1] <= 0) continue;  // žádný chodník → přeskočit
+        // Střed chodníku = asfaltHalf + chodník/2
+        const swOff = widths[0] / 2 + widths[1] * 0.5;
         for (let i = 1; i + 3 < a.length; i += 2) {
           const x1 = wx2m(a[i]), z1 = wy2m(a[i + 1]);
           const x2 = wx2m(a[i + 2]), z2 = wy2m(a[i + 3]);
           const mx = (x1 + x2) / 2, mz = (z1 + z2) / 2;
           const dx = x2 - x1, dz = z2 - z1, len = Math.hypot(dx, dz) || 1;
-          const nx = -dz / len, nz = dx / len, off = 6;
-          streetCands.push({ x: mx + nx * off, z: mz + nz * off });
-          streetCands.push({ x: mx - nx * off, z: mz - nz * off });
+          const nx = -dz / len, nz = dx / len;
+          streetCands.push({ x: mx + nx * swOff, z: mz + nz * swOff });
+          streetCands.push({ x: mx - nx * swOff, z: mz - nz * swOff });
         }
       }
     }
@@ -991,8 +1081,9 @@
   }
 
   // Najdi volný kandidát v prstenci [near, far] kolem hráče (z mřížky)
-  // isTreeGrid=true → navíc zamítne body padající na road mask (stromy v asfaltu)
-  function pickCandidate(cands, grid, px, pz, near, far, occupied, gname, isTreeGrid) {
+  // isTreeGrid=true → zamítne body na road mask (stromy/keře na asfalt/chodník)
+  // isStreetGrid=true → zamítne body na asfaltové masce (lampy/lavičky jen na chodníku)
+  function pickCandidate(cands, grid, px, pz, near, far, occupied, gname, isTreeGrid, isStreetGrid) {
     if (!grid || !cands.length) return -1;
     const cx = Math.floor(px / PROP_CELL), cz = Math.floor(pz / PROP_CELL);
     const span = Math.ceil(far / PROP_CELL);
@@ -1005,8 +1096,10 @@
           const c = cands[idx];
           const d = Math.hypot(c.x - px, c.z - pz);
           if (d < near || d > far) continue;
-          // Stromy/keře/tráva/kytky nesmí stát na cestě
+          // Stromy/keře/tráva/kytky nesmí stát na cestě (plná maska: asfalt+chodník)
           if (isTreeGrid && isOnRoad(c.x, c.z)) continue;
+          // Street props (lampy/lavičky) nesmí stát na asfaltu — smí jen na chodníku
+          if (isStreetGrid && isOnAsphalt(c.x, c.z)) continue;
           const rr = seededR(idx * 3.1);  // náhodný výběr → rozmanitost
           if (rr > bestRand) { bestRand = rr; best = idx; }
         }
@@ -1030,9 +1123,10 @@
         occupied.delete(p.candKey); p.candKey = null;
       }
       const tree = p.kind.grid === 'tree';
+      const street = p.kind.grid === 'street';
       const cands = tree ? treeCands : streetCands;
       const grid = tree ? treeGrid : streetGrid;
-      const idx = pickCandidate(cands, grid, px, pz, NEAR, FAR, occupied, p.kind.grid, tree);
+      const idx = pickCandidate(cands, grid, px, pz, NEAR, FAR, occupied, p.kind.grid, tree, street);
       if (idx < 0) { p.sprite.visible = false; continue; }
       const key = p.kind.grid + ':' + idx;
       occupied.add(key); p.candKey = key;
@@ -1332,13 +1426,13 @@
 
     // Podlaha + detail země
     if (BAKED_GROUND) {
-      // Zapečená textura: tráva + zeleň + voda → měkká zem
+      // Zapečená textura: tráva + zeleň + voda + chodníky + asfalt → měkká zem s dokonalými křižovatkami
       scene.add(buildBakedGround());
-      // Cesty jako geometrie navrch → vždy ostré, nezávislé na rozlišení textury
-      const roadsMeshBaked = buildRoads();
-      if (roadsMeshBaked) {
-        if (ENABLE_SHADOWS) roadsMeshBaked.traverse(m => { if (m.isMesh) m.receiveShadow = true; });
-        scene.add(roadsMeshBaked);
+      // Pouze bílé čáry jako geometrie navrch (y=0.10) → ostré, bez blikání
+      const markingsMesh = buildRoadMarkings();
+      if (markingsMesh) {
+        if (ENABLE_SHADOWS) markingsMesh.receiveShadow = true;
+        scene.add(markingsMesh);
       }
     } else {
       // Původní geometrie (fallback pro ladění)

@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v72';   // bump: hybrid — ostré cesty (geometrie) na textuře trávy + props mimo cestu
+const CACHE = 'smazak-v73';   // bump: finální cesty — povrch zapečený (kulaté křižovatky) + ostré čáry geometrie + props mimo asfalt
 const FILES = [
   './',
   './index.html',
