@@ -1,14 +1,17 @@
-const CACHE = 'smazak-v89';   // bump: první animovaná NPC (vietnamec, policajt, pálkař, feťák) chodí po Těšíně
+const CACHE = 'smazak-v90';   // bump: +3 animované NPC (manažer, ožralá, dědek) ve složce pohyblive_npc
 const FILES = [
   './',
   './index.html',
   './manifest.json',
   './assets/simmy_walk.png',
   './assets/menu_bg.png',
-  './assets/chars/vietnamec.png',
-  './assets/chars/policajt.png',
-  './assets/chars/palkar.png',
-  './assets/chars/fetak.png',
+  './assets/pohyblive_npc/vietnamec.png',
+  './assets/pohyblive_npc/policajt.png',
+  './assets/pohyblive_npc/palkar.png',
+  './assets/pohyblive_npc/fetak.png',
+  './assets/pohyblive_npc/manazer.png',
+  './assets/pohyblive_npc/ozrala.png',
+  './assets/pohyblive_npc/dedek.png',
   './assets/props/strom_clean.png',
   './assets/props/gen/ker.png',
   './assets/props/gen/lampa.png',

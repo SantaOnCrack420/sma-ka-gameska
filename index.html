@@ -117,7 +117,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v89</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v90</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -218,16 +218,19 @@
     // ── Sprite knihovna ───────────────────────────────────────
     const SPRITES = {};
     function loadImg(key, src){ const im=new Image(); im.onload=()=>im._ok=true; im.src=src; SPRITES[key]=im; }
-    // Animované postavy — 6-snímkové sprite sheety (assets/chars/), čistě vyklíčované z magenty.
+    // Animované postavy — 6-snímkové sprite sheety (assets/pohyblive_npc/), vyklíčované z magenty.
     const ANIM = {
       vietnamec:{frames:6,enemy:false},
       policajt :{frames:6,enemy:false},
+      manazer  :{frames:6,enemy:false},
+      ozrala   :{frames:6,enemy:false},
+      dedek    :{frames:6,enemy:false},
       palkar   :{frames:6,enemy:true},
       fetak    :{frames:6,enemy:true},
     };
-    const CIVIL = ['vietnamec','policajt'];
+    const CIVIL = ['vietnamec','policajt','manazer','ozrala','dedek'];
     const ENEMY = ['palkar','fetak'];
-    Object.keys(ANIM).forEach(k=>loadImg(k,'assets/chars/'+k+'.png'));
+    Object.keys(ANIM).forEach(k=>loadImg(k,'assets/pohyblive_npc/'+k+'.png'));
     // mobiliář / zeleň (props) — keř, strom, lampa, zastávka, kytky, koš, popelnice
     loadImg('strom','assets/props/strom_clean.png');
     ['ker','lampa','zastavka','kytky','kos','popelnice'].forEach(k=>loadImg(k,'assets/props/gen/'+k+'.png'));
