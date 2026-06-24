@@ -118,7 +118,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v94</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v95</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -742,8 +742,9 @@
 
     function stylize(){
       makeTextures();
-      try { map.setSky({ 'sky-color':'#8fc1ee','horizon-color':'#dfeaf4','fog-color':'#e9eef5',
-        'sky-horizon-blend':0.55,'horizon-fog-blend':0.5 }); } catch(e){}
+      // zlatá hodina: modrá obloha → teplý zlatavý horizont (hloubka + vibe)
+      try { map.setSky({ 'sky-color':'#83b4e6','horizon-color':'#f3d6a6','fog-color':'#ecdcc2',
+        'sky-horizon-blend':0.72,'horizon-fog-blend':0.62 }); } catch(e){}
       // budovy: PLNÉ (neprůhledné) + PESTRÁ barva dle ID baráku (každý jiný, ne 2-3 dokola)
       const PAL=['#dcc7a4','#cdaa6e','#b9846a','#c2bcab','#a9b39a','#9fb0bb','#e0d2af','#c4895f','#b59f86','#d6b9d0'];
       const idx=['floor',['%',['abs',['to-number',['coalesce',['id'],['get','render_height'],['get','height'],7]]],10]];

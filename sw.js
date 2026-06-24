@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v94';   // bump: střešní čepice (okna jen na stěnách) + širší chodníky/cesty/pěšiny
+const CACHE = 'smazak-v95';   // bump: atmosfera zlate hodiny (teply horizont, hloubka)
 const FILES = [
   './',
   './index.html',
