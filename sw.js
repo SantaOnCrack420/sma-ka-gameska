@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v83';   // bump: animovaná chůze Šimmyho (simmy_walk) + pohled z 3. osoby (pitch 70)
+const CACHE = 'smazak-v84';   // bump: proceduální textury (tráva/asfalt/beton) + šipka nad hráčem
 const FILES = [
   './',
   './index.html',

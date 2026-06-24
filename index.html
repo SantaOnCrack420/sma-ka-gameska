@@ -117,7 +117,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v83</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v84</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -617,6 +617,11 @@
       fctx.globalAlpha=0.5; fctx.strokeStyle='#ffd23f'; fctx.lineWidth=2;
       fctx.beginPath(); fctx.ellipse(cx, cy, 13, 6, 0, 0, Math.PI*2); fctx.stroke();
       fctx.globalAlpha=1;
+      // zlatá šipka nad hlavou hráče = "tohle jsi ty" (odliší od NPC)
+      const ay = cy - 64 - Math.sin(performance.now()/300)*3;   // jemně pulzuje
+      fctx.fillStyle='#ffd23f'; fctx.strokeStyle='#1a1a2e'; fctx.lineWidth=1.5;
+      fctx.beginPath(); fctx.moveTo(cx-7,ay); fctx.lineTo(cx+7,ay); fctx.lineTo(cx,ay+9); fctx.closePath();
+      fctx.fill(); fctx.stroke();
 
       // props + NPC dohromady, seřazené dle vzdálenosti (vzdálené první = správné překrytí)
       const drawList=[];
@@ -678,7 +683,35 @@
     }
 
     // ── Stylizace: "kreslená realita" + víc barev ─────────────
+    // ── Proceduální textury (tráva / asfalt / beton chodníku) ──
+    // Generované na canvas → map.addImage. Žádné externí soubory ani licence.
+    function texTile(size, draw){ const c=document.createElement('canvas'); c.width=c.height=size;
+      const g=c.getContext('2d'); draw(g,size); return g.getImageData(0,0,size,size); }
+    function makeTextures(){
+      const S=64;
+      try{ if(!map.hasImage('tex-grass')) map.addImage('tex-grass', texTile(S,(g,s)=>{
+        g.fillStyle='#93c267'; g.fillRect(0,0,s,s);
+        for(let i=0;i<420;i++){ const x=Math.random()*s,y=Math.random()*s,d=Math.random();
+          g.fillStyle = d<0.5 ? 'rgba(70,120,55,0.55)' : 'rgba(180,210,130,0.45)';
+          g.fillRect(x,y,1,1+Math.random()*2.5); }
+      }), {pixelRatio:2}); }catch(e){}
+      try{ if(!map.hasImage('tex-asphalt')) map.addImage('tex-asphalt', texTile(S,(g,s)=>{
+        g.fillStyle='#565a66'; g.fillRect(0,0,s,s);
+        for(let i=0;i<900;i++){ const x=Math.random()*s,y=Math.random()*s;
+          g.fillStyle = Math.random()<0.5 ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.11)';
+          g.fillRect(x,y,1,1); }
+      }), {pixelRatio:2}); }catch(e){}
+      try{ if(!map.hasImage('tex-concrete')) map.addImage('tex-concrete', texTile(S,(g,s)=>{
+        g.fillStyle='#dcd5c4'; g.fillRect(0,0,s,s);
+        for(let i=0;i<520;i++){ const x=Math.random()*s,y=Math.random()*s;
+          g.fillStyle='rgba(120,108,86,'+(Math.random()*0.10)+')'; g.fillRect(x,y,1,1); }
+        g.strokeStyle='rgba(120,108,86,0.22)'; g.lineWidth=1;   // spáry dlažby
+        g.beginPath(); g.moveTo(0,s/2); g.lineTo(s,s/2); g.moveTo(s/2,0); g.lineTo(s/2,s); g.stroke();
+      }), {pixelRatio:2}); }catch(e){}
+    }
+
     function stylize(){
+      makeTextures();
       try { map.setSky({ 'sky-color':'#8fc1ee','horizon-color':'#dfeaf4','fog-color':'#e9eef5',
         'sky-horizon-blend':0.55,'horizon-fog-blend':0.5 }); } catch(e){}
       // budovy: teplý gradient dle výšky + pestrá variace dle ID baráku
@@ -704,9 +737,13 @@
         const layers = map.getStyle().layers || [];
         for(const L of layers){
           const id=L.id, t=L.type;
-          if(t==='background'){ map.setPaintProperty(id,'background-color','#cfe0b8'); }
+          if(t==='background'){ map.setPaintProperty(id,'background-color','#9ccb6e');
+            try{ if(map.hasImage('tex-grass')) map.setPaintProperty(id,'background-pattern','tex-grass'); }catch(e){} }
           else if(/water/.test(id) && t==='fill'){ try{map.setPaintProperty(id,'fill-color','#7fc2e8');}catch(e){} }
-          else if(/(park|grass|wood|forest|green|garden|pitch|golf)/.test(id) && t==='fill'){ try{map.setPaintProperty(id,'fill-color','#9ccb6e');}catch(e){} }
+          else if(/(park|grass|wood|forest|green|garden|pitch|golf)/.test(id) && t==='fill'){ try{
+            map.setPaintProperty(id,'fill-color','#86bd5b');
+            if(map.hasImage('tex-grass')) map.setPaintProperty(id,'fill-pattern','tex-grass');
+          }catch(e){} }
           else if(/(sand|beach)/.test(id) && t==='fill'){ try{map.setPaintProperty(id,'fill-color','#f0e2b0');}catch(e){} }
         }
       }catch(e){}
@@ -740,12 +777,14 @@
         try{
           if(/casing/.test(id)){
             if(/path|pedestrian/.test(id)) continue;
-            map.setPaintProperty(id,'line-color',SIDEWALK);        // chodník
+            map.setPaintProperty(id,'line-color',SIDEWALK);        // chodník (fallback barva)
+            if(map.hasImage('tex-concrete')) map.setPaintProperty(id,'line-pattern','tex-concrete');
             map.setPaintProperty(id,'line-width',widthExpr(c[2],c[3]));
           } else if(/path|pedestrian/.test(id)){
             map.setPaintProperty(id,'line-color',PATH);
           } else {
-            map.setPaintProperty(id,'line-color',ASPHALT);         // asfalt
+            map.setPaintProperty(id,'line-color',ASPHALT);         // asfalt (fallback barva)
+            if(map.hasImage('tex-asphalt')) map.setPaintProperty(id,'line-pattern','tex-asphalt');
             map.setPaintProperty(id,'line-width',widthExpr(c[0],c[1]));
           }
         }catch(e){}
