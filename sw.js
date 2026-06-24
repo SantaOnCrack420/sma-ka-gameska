@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v74';   // bump: index.html = MapLibre herní režim (hratelný sandbox). Starý engine → index_classic.html
+const CACHE = 'smazak-v75';   // bump: oprava viditelnosti Šimmyho + proceduální hranolky/smažák + props (keře/lampy/zastávky)
 const FILES = [
   './',
   './index.html',
@@ -12,6 +12,13 @@ const FILES = [
   './assets/npc/vendor.png',
   './assets/enemy/gen/somrak.png',
   './assets/enemy/gen/gauner.png',
+  './assets/props/strom_clean.png',
+  './assets/props/gen/ker.png',
+  './assets/props/gen/lampa.png',
+  './assets/props/gen/zastavka.png',
+  './assets/props/gen/kytky.png',
+  './assets/props/gen/kos.png',
+  './assets/props/gen/popelnice.png',
   './assets/icon.png',
   './assets/icon-512.png',
   './assets/apple-touch-icon.png',

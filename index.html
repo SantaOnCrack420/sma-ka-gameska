@@ -15,9 +15,11 @@
     #map{position:absolute;inset:0}
     /* FX overlay = NPC, hranolky, smažák, particly (kreslené přes 3D mapu) */
     #fx{position:fixed;inset:0;z-index:2;pointer-events:none}
-    /* Šimmy je pevně uprostřed obrazovky (kamera ho sleduje) */
-    #simmy{position:fixed;left:50%;top:50%;width:38px;height:auto;transform:translate(-50%,-86%);
-      z-index:4;pointer-events:none;filter:drop-shadow(0 3px 3px rgba(0,0,0,.5))}
+    /* Šimmy je pevně uprostřed obrazovky (kamera ho sleduje).
+       Explicitní šířka+výška (poměr 473:1017) — height:auto na iOS někdy = 0. */
+    #simmy{position:fixed;left:50%;top:50%;width:52px;height:112px;transform:translate(-50%,-90%);
+      z-index:5;pointer-events:none;
+      filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 4px 4px rgba(0,0,0,.55))}
     #hud{position:fixed;left:8px;top:8px;z-index:5;background:rgba(8,8,16,.82);color:#fff;
       padding:8px 12px;border:2px solid #ffd23f;border-radius:10px;font-size:15px;line-height:1.5;font-weight:600}
     #hud b{color:#ffd23f}
@@ -39,7 +41,7 @@
 <body>
   <div id="map"></div>
   <canvas id="fx"></canvas>
-  <img id="simmy" src="assets/simmy_char.png" alt="Šimmy">
+  <img id="simmy" src="assets/simmy_char.png" alt="Šimmy" onerror="document.getElementById('err').textContent='Šimmy PNG se nenačetl!'">
   <div id="hud"><b>🍟 0</b> &nbsp; ❤️❤️❤️</div>
   <div id="joy"></div>
   <div id="hint">drž a táhni = otoč pohled</div>
@@ -47,7 +49,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;left:5px;bottom:3px;z-index:9998;color:#fff;opacity:.55;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">MapLibre v74</div>
+  <div id="ver" style="position:fixed;left:5px;bottom:3px;z-index:9998;color:#fff;opacity:.55;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">MapLibre v75</div>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
   const show = m => document.getElementById('err').textContent = m;
@@ -88,6 +90,12 @@
     const ENEMY = ['somrak','gauner'];
     CIVIL.forEach(k=>loadImg(k,'assets/npc/'+k+'.png'));
     ENEMY.forEach(k=>loadImg(k,'assets/enemy/gen/'+k+'.png'));
+    // mobiliář / zeleň (props) — keř, strom, lampa, zastávka, kytky, koš, popelnice
+    const PROP_KEYS = ['ker','strom','lampa','zastavka','kytky','kos','popelnice'];
+    loadImg('strom','assets/props/strom_clean.png');
+    ['ker','lampa','zastavka','kytky','kos','popelnice'].forEach(k=>loadImg(k,'assets/props/gen/'+k+'.png'));
+    // přibližná výška propu v "metrech světa" pro měřítko (vyšší = větší)
+    const PROP_H = { strom:6, zastavka:3, lampa:5, ker:1.6, kytky:0.8, kos:1.1, popelnice:1.4 };
 
     // ── Stav hry ──────────────────────────────────────────────
     let score = 0, lives = 3, hurtCd = 0, smazCd = 0, gameOver = false;
@@ -112,6 +120,40 @@
       const ang = Math.random()*Math.PI*2, r = 90+Math.random()*90;
       o.lng = lng; o.lat = lat; moveGeo(o, Math.cos(ang)*r, Math.sin(ang)*r);
       o.hp = o.enemy ? 3 : 1; o.hit=0; o.flee=0; o.dir=Math.random()*Math.PI*2;
+    }
+
+    // ── Props (zeleň + mobiliář) — rozmístěné dle povrchu mapy ──
+    const props = [], PROP_MAX = 28;
+    function surfaceAt(sx, sy){
+      try{
+        const f = map.queryRenderedFeatures([sx, sy]);
+        let road=false, green=false;
+        for(const ft of f){
+          const id = ((ft.layer&&ft.layer.id)||'')+' '+(ft.sourceLayer||'');
+          if(/building/.test(id)) return 'building';
+          if(/(road|transport|bridge|tunnel|rail|path|pedestrian)/.test(id)) road=true;
+          if(/(park|grass|wood|forest|green|garden|scrub|cemetery|pitch|golf|recreation|farmland)/.test(id)) green=true;
+        }
+        if(green) return 'green';
+        if(road)  return 'road';
+      }catch(e){}
+      return 'other';
+    }
+    function scatterProps(){
+      let tries=0;
+      while(props.length<PROP_MAX && tries<14){
+        tries++;
+        const ang=Math.random()*Math.PI*2, r=30+Math.random()*160;
+        const o={lng,lat}; moveGeo(o, Math.cos(ang)*r, Math.sin(ang)*r);
+        const p=map.project([o.lng,o.lat]);
+        if(p.x<10||p.x>innerWidth-10||p.y<10||p.y>innerHeight-10) continue;
+        const surf=surfaceAt(p.x,p.y);
+        if(surf==='building'||surf==='road') continue;
+        o.key = (surf==='green') ? rnd(['strom','ker','ker','kytky','kytky','strom'])
+                                 : rnd(['lampa','kos','popelnice','zastavka','ker']);
+        props.push(o);
+      }
+      for(let i=props.length-1;i>=0;i--) if(distM(lng,lat,props[i].lng,props[i].lat)>250) props.splice(i,1);
     }
 
     // ── Particly (splat) ──────────────────────────────────────
@@ -196,7 +238,7 @@
 
     // ── Update logika ─────────────────────────────────────────
     const SPEED = 9;                            // m/s Šimmy
-    let facing = 1;
+    let facing = 1, propTimer = 0;
     function update(dt){
       if(gameOver) return;
       if(fireCd>0) fireCd-=dt;
@@ -219,9 +261,12 @@
         lat += north*d/MLAT;
         lng += east*d/mlng(lat);
       }
-      document.getElementById('simmy').style.transform=`translate(-50%,-86%) scaleX(${facing})`;
+      document.getElementById('simmy').style.transform=`translate(-50%,-90%) scaleX(${facing})`;
 
       if(firing) throwFry();
+
+      // props — doplňuj a uklízej cca 3×/s (queryRenderedFeatures je drahé)
+      propTimer-=dt; if(propTimer<=0){ propTimer=0.3; scatterProps(); }
 
       // NPC
       while(npcs.length<NPC_MAX) spawnNpc(false);
@@ -288,53 +333,88 @@
     // měřítko spritu dle vzdálenosti (blíž = větší). Konzistentní díky honící kameře.
     const spriteScale = dM => Math.max(0.2, Math.min(1.4, 15/(7+dM)));
 
+    function rrect(g,x,y,w,h,r){ g.beginPath();
+      g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+      g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
+
+    // hranolky v červeném kornoutu (proceduální — žádné emoji)
+    function drawFries(g,s){
+      const w=s*0.8, h=s*0.8;
+      g.lineWidth=Math.max(1,s*0.035); g.strokeStyle='#caa01a';
+      g.fillStyle='#f6c945';
+      for(let i=0;i<4;i++){ const x=(-0.3+i*0.2)*w, hh=h*(0.62+(i%2)*0.16);
+        g.fillRect(x, -h*0.18-hh, w*0.12, hh); g.strokeRect(x, -h*0.18-hh, w*0.12, hh); }
+      g.fillStyle='#d23b2b';                       // kornout
+      g.beginPath(); g.moveTo(-w*0.46,-h*0.18); g.lineTo(w*0.46,-h*0.18);
+      g.lineTo(w*0.3,h*0.5); g.lineTo(-w*0.3,h*0.5); g.closePath(); g.fill();
+      g.fillStyle='#ee5544'; g.fillRect(-w*0.46,-h*0.22,w*0.92,h*0.1);
+    }
+    // smažák = smažený sýr (zlatá obalovaná placka + roztečený sýr)
+    const SMAZ_SPECK=[[-.28,-.18],[.22,-.1],[-.12,.16],[.3,.12],[.02,-.04],[-.3,.06],[.14,.2]];
+    function drawSmaz(g,s){
+      const w=s, h=s*0.74, r=s*0.16;
+      g.fillStyle='#ffd23f'; rrect(g,-w*0.34,-h*0.5-h*0.12,w*0.68,h*0.3,r*0.6); g.fill(); // sýr peek nahoře
+      g.fillStyle='#d99a3a'; g.strokeStyle='#a8661c'; g.lineWidth=Math.max(1,s*0.05);
+      rrect(g,-w/2,-h/2,w,h,r); g.fill(); g.stroke();                                     // obalovaná placka
+      g.fillStyle='#b87a26';
+      for(const sp of SMAZ_SPECK){ g.beginPath(); g.arc(sp[0]*w,sp[1]*h,s*0.045,0,7); g.fill(); }
+      g.fillStyle='#ffcf3a'; rrect(g,-w*0.16,-h*0.14,w*0.32,h*0.26,s*0.05); g.fill();     // roztečený sýr uvnitř
+    }
+
     function render(){
       fctx.clearRect(0,0,innerWidth,innerHeight);
-      // seřaď podle vzdálenosti (vzdálené první = správné překrytí)
-      const drawList=[];
-      for(const o of npcs){ if(o.hp>0) drawList.push(o); }
-      drawList.sort((a,b)=>distM(lng,lat,b.lng,b.lat)-distM(lng,lat,a.lng,a.lat));
 
-      for(const o of drawList){
-        const p = map.project([o.lng,o.lat]);
-        if(p.x<-80||p.x>innerWidth+80||p.y<-120||p.y>innerHeight+80) continue;
-        const dM = distM(lng,lat,o.lng,o.lat);
-        const sc = spriteScale(dM);
-        const im = SPRITES[o.key];
-        const h = 72*sc;
-        const w = (im && im._ok && im.naturalHeight) ? h*(im.naturalWidth/im.naturalHeight) : 30*sc;
+      // stín + "stojíš tady" kroužek pod Šimmym (Šimmy = DOM img nad canvasem)
+      const cx=innerWidth/2, cy=innerHeight/2;
+      fctx.globalAlpha=0.32; fctx.fillStyle='#000';
+      fctx.beginPath(); fctx.ellipse(cx, cy, 16, 7, 0, 0, Math.PI*2); fctx.fill();
+      fctx.globalAlpha=0.5; fctx.strokeStyle='#ffd23f'; fctx.lineWidth=2;
+      fctx.beginPath(); fctx.ellipse(cx, cy, 18, 8, 0, 0, Math.PI*2); fctx.stroke();
+      fctx.globalAlpha=1;
+
+      // props + NPC dohromady, seřazené dle vzdálenosti (vzdálené první = správné překrytí)
+      const drawList=[];
+      for(const o of props) drawList.push({o, wh:(PROP_H[o.key]||2), key:o.key, face:1, hit:0, prop:true});
+      for(const o of npcs){ if(o.hp>0) drawList.push({o, wh:3.3, key:o.key, face:o.face, hit:o.hit, enemy:o.enemy}); }
+      drawList.sort((a,b)=>distM(lng,lat,b.o.lng,b.o.lat)-distM(lng,lat,a.o.lng,a.o.lat));
+
+      for(const it of drawList){
+        const o=it.o, p=map.project([o.lng,o.lat]);
+        if(p.x<-90||p.x>innerWidth+90||p.y<-160||p.y>innerHeight+90) continue;
+        const dM=distM(lng,lat,o.lng,o.lat), sc=spriteScale(dM);
+        const im=SPRITES[it.key];
+        const h=it.wh*22*sc;
+        const w=(im && im._ok && im.naturalHeight) ? h*(im.naturalWidth/im.naturalHeight) : h*0.4;
         // stín
-        fctx.globalAlpha=0.28; fctx.fillStyle='#000';
-        fctx.beginPath(); fctx.ellipse(p.x, p.y, w*0.32, w*0.13, 0, 0, Math.PI*2); fctx.fill();
+        fctx.globalAlpha=0.26; fctx.fillStyle='#000';
+        fctx.beginPath(); fctx.ellipse(p.x, p.y, Math.max(4,w*0.34), Math.max(2,w*0.14), 0, 0, Math.PI*2); fctx.fill();
         fctx.globalAlpha=1;
         if(im && im._ok){
-          fctx.save(); fctx.translate(p.x,p.y); fctx.scale(o.face,1);
-          if(o.hit>0){ fctx.globalAlpha=0.6+0.4*Math.random(); }   // záblesk po zásahu
-          fctx.drawImage(im, -w/2, -h, w, h); fctx.restore();
-          fctx.globalAlpha=1;
-        } else {
-          fctx.fillStyle=o.enemy?'#c0392b':'#3a6ea5';
-          fctx.fillRect(p.x-w*0.18, p.y-h, w*0.36, h);
+          fctx.save(); fctx.translate(p.x,p.y); fctx.scale(it.face,1);
+          if(it.hit>0) fctx.globalAlpha=0.55+0.45*Math.random();   // záblesk po zásahu
+          fctx.drawImage(im, -w/2, -h, w, h); fctx.restore(); fctx.globalAlpha=1;
+        } else if(!it.prop){
+          fctx.fillStyle=it.enemy?'#c0392b':'#3a6ea5';
+          fctx.fillRect(p.x-w*0.5, p.y-h, w, h);
         }
       }
 
       // particly
       for(const pt of parts){ const p=map.project([pt.lng,pt.lat]);
         fctx.globalAlpha=Math.max(0,Math.min(1,pt.life/0.5)); fctx.fillStyle=pt.col;
-        const r=Math.max(1.5, 3*spriteScale(distM(lng,lat,pt.lng,pt.lat))*3);
+        const r=Math.max(1.5, 9*spriteScale(distM(lng,lat,pt.lng,pt.lat)));
         fctx.beginPath(); fctx.arc(p.x,p.y,r,0,Math.PI*2); fctx.fill(); }
       fctx.globalAlpha=1;
 
-      // hranolky
-      fctx.textAlign='center'; fctx.textBaseline='middle';
+      // hranolky (proceduální kornout)
       for(const f of fries){ const p=map.project([f.lng,f.lat]);
-        const sz=Math.round(26*spriteScale(distM(lng,lat,f.lng,f.lat))); if(sz<6)continue;
-        fctx.font=sz+'px serif'; fctx.fillText('🍟',p.x,p.y); }
-      // smažák
-      for(const s of smazaks){ const p=map.project([s.lng,s.lat]);
-        const sz=Math.round(40*spriteScale(distM(lng,lat,s.lng,s.lat)));
-        fctx.save(); fctx.translate(p.x,p.y); fctx.rotate(s.t); fctx.font=sz+'px serif';
-        fctx.fillText('🧀',0,0); fctx.restore(); }
+        const s=34*spriteScale(distM(lng,lat,f.lng,f.lat)); if(s<5)continue;
+        fctx.save(); fctx.translate(p.x,p.y); drawFries(fctx,s); fctx.restore(); }
+      // smažák (rotující smažený sýr)
+      for(const sm of smazaks){ const p=map.project([sm.lng,sm.lat]);
+        const s=48*spriteScale(distM(lng,lat,sm.lng,sm.lat));
+        fctx.save(); fctx.translate(p.x,p.y); fctx.rotate(sm.t*0.5); drawSmaz(fctx,s); fctx.restore(); }
+      fctx.textAlign='center'; fctx.textBaseline='middle';
 
       // popup hláška nad Šimmym
       if(popT>0){ fctx.globalAlpha=Math.min(1,popT); fctx.font='bold 16px system-ui';
