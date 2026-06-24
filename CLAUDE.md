@@ -21,10 +21,16 @@ naráží na NPC chodce i nepřátele, sbírá předměty. Čistě browserová h
 - **Stíny**: directional + texel-snap (neskáčou), za přepínačem ENABLE_SHADOWS.
 - COMBAT=false (klidná procházka).
 
-### B) 🔭 STRATEGICKÝ SMĚR: migrace na MapLibre (game-mode) — PROTOTYP, rozhodnuto jít touto cestou
-David viděl MapLibre demo a CHCE tím směrem jít (reálná mapa Těšína: ulice, obchody, zastávky, Alza boxy, budovy — vše zadarmo z OpenFreeMap). Prototypy:
+### B) ✅ HLAVNÍ SMĚR: MapLibre (game-mode) — TEĎ HRATELNÝ SANDBOX (2026-06-24)
+David ROZHODL: nový MapLibre engine (reálné rozložení Těšína: ulice/baráky) je základ, do něj se přenáší barvy + vychytávky/gameplay ze starého enginu. **NE oživovat starý custom engine** — ten zůstává stabilní v `index.html` jako fallback (boj tam zůstal vypnutý, COMBAT=false). Prototypy:
 - `test_maplibre.html` — čisté demo enginu (náklon/otáčení).
-- `test_maplibre_game.html` — **HERNÍ režim**: ovladatelný Šimmy (joystick/WASD), honící kamera (jumpTo každý frame), pohyb relativní ke kameře, tlačítko **👁 oko = drž a táhni = otoč pohled** (do jiné ulice). Stylizované teplé 3D budovy + obloha. Šimmy 34px, zoom 18.7, pitch 62.
+- `test_maplibre_game.html` — **HRATELNÝ herní režim** (live URL: `…/test_maplibre_game.html`, GitHub Pages servíruje přímo). Co je hotové:
+  - Ovladatelný Šimmy (joystick vlevo dole / WASD), honící kamera (`jumpTo` každý frame), pohyb relativní ke kameře, **👁 oko = drž a táhni = otoč pohled**.
+  - **Gameplay**: 🍟 tlačítko (drž = pal hranolky, auto-aim na nejbližší NPC do 80 m) + 🧀 smažák speciál (5 s CD, AoE 14 m). Skóre + 3 životy. Civil hp 1 (schytá hranolku → panikaří/utíká), enemy hp 3 (honí hráče, ubírá život). NPC se po srážce recyklují.
+  - **FX overlay** (`#fx` canvas): NPC sprity, hranolky/smažák (emoji), splat particly — vše umístěné přes `map.project([lng,lat])`. Měřítko spritu dle vzdálenosti (`spriteScale`). Vše ve světě v lng/lat, převody přes `MLAT`/`mlng`/`moveGeo`/`distM`.
+  - **Stylizace**: teplé 3D budovy (gradient dle výšky), obloha, pestřejší zem/zeleň/voda (projde vrstvy stylu a přebarví dle ID).
+  - Sprity NPC: civilové `assets/npc/{man_phone,tourist,babka,teenager,mama,vendor}.png`, enemy `assets/enemy/gen/{somrak,gauner}.png`. Šimmy 38px, zoom 18.7, pitch 62.
+  - **TODO dál**: promovat na `index.html` (až bude stabilní; vyřešit menu/hudbu/žebříček/PWA), okna na barácích, POI cedule obchodů, sběr párna/perky, lepší sprity projektilů místo emoji.
 - **Snadné na MapLibre**: barevné domy, obloha, props/cedule na reálné POI pozice, popisky zdarma, otáčení kamery.
 - **Těžké na MapLibre (později)**: okna na domech (chce vlastní shader/Three vrstvu), stíny budov (GL JS neumí nativně).
 
