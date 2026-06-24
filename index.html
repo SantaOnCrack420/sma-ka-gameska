@@ -118,7 +118,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v93</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v94</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -781,6 +781,13 @@
         }
         if(added===3){ ['building-3d','building-top','building','tst-3d'].forEach(id=>{
           if(map.getLayer(id)){ try{ map.setLayoutProperty(id,'visibility','none'); }catch(e){} } }); }
+        // střešní čepice: tenký PLNÝ plát navrch budovy → zakryje okna na střeše
+        if(!map.getLayer('sim-roof')){ try{ map.addLayer({ id:'sim-roof', source:'openmaptiles','source-layer':'building',
+          type:'fill-extrusion', minzoom:14,
+          paint:{ 'fill-extrusion-color':['match',['%',['abs',['to-number',['coalesce',['id'],0]]],3],0,'#6b665e',1,'#7a5f50',2,'#63676a','#6b665e'],
+            'fill-extrusion-base':['coalesce',['get','render_height'],['get','height'],9],
+            'fill-extrusion-height':['+',['coalesce',['get','render_height'],['get','height'],9],0.6],
+            'fill-extrusion-opacity':1 } }); }catch(e){} }
       }
       // pestřejší zem/zeleň/voda — projdi vrstvy a přebarvi dle typu
       try{
@@ -829,8 +836,8 @@
     // Šířky škálujeme až do zoomu 22 (orig. styl je stropuje na z20 → po přiblížení
     // by byly cesty tenké). [vozovka@z20, vozovka@z22, chodník@z20, chodník@z22]
     const RW = {
-      motorway:[36,76,62,128], trunk:[34,70,58,118], secondary:[28,58,50,100],
-      minor:[28,60,48,98], service:[17,36,30,62], link:[16,34,28,58],
+      motorway:[44,92,80,162], trunk:[42,86,76,152], secondary:[36,74,68,136],
+      minor:[36,76,66,132], service:[24,50,46,92], link:[22,46,42,84],
     };
     function roadClass(id){
       if(/motorway/.test(id))return 'motorway';
@@ -856,7 +863,9 @@
             if(map.hasImage('tex-concrete')) map.setPaintProperty(id,'line-pattern','tex-concrete');
             map.setPaintProperty(id,'line-width',widthExpr(c[2],c[3]));
           } else if(/path|pedestrian/.test(id)){
-            map.setPaintProperty(id,'line-color',PATH);
+            map.setPaintProperty(id,'line-color',PATH);                // pěšina v trávě — širší
+            if(map.hasImage('tex-concrete')) map.setPaintProperty(id,'line-pattern','tex-concrete');
+            map.setPaintProperty(id,'line-width',widthExpr(16,34));
           } else {
             map.setPaintProperty(id,'line-color',ASPHALT);         // asfalt (fallback barva)
             if(map.hasImage('tex-asphalt')) map.setPaintProperty(id,'line-pattern','tex-asphalt');

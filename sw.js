@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v93';   // bump: urbánní zem (ne louka) + okna na fasádách (3 typy) + realismus
+const CACHE = 'smazak-v94';   // bump: střešní čepice (okna jen na stěnách) + širší chodníky/cesty/pěšiny
 const FILES = [
   './',
   './index.html',
