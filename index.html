@@ -117,7 +117,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v85</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v86</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -218,10 +218,13 @@
     // ── Sprite knihovna ───────────────────────────────────────
     const SPRITES = {};
     function loadImg(key, src){ const im=new Image(); im.onload=()=>im._ok=true; im.src=src; SPRITES[key]=im; }
-    const CIVIL = ['man_phone','tourist','babka','teenager','mama','vendor'];
-    const ENEMY = ['somrak','gauner'];
+    // jen ověřené ČISTĚ ořezané jednotlivé postavy (poměr <1, vizuálně zkontrolováno)
+    const CIVIL = ['man_phone','tourist','babka','teenager','mama','vendor','businessman','cop','jogger_f'];
+    const ENEMY = ['somrak','gauner','criminal','thug','pickpocket','fetak','psycho_kid'];
     CIVIL.forEach(k=>loadImg(k,'assets/npc/'+k+'.png'));
-    ENEMY.forEach(k=>loadImg(k,'assets/enemy/gen/'+k+'.png'));
+    loadImg('somrak','assets/enemy/gen/somrak.png');
+    loadImg('gauner','assets/enemy/gen/gauner.png');
+    ['criminal','thug','pickpocket','fetak','psycho_kid'].forEach(k=>loadImg(k,'assets/enemy/'+k+'.png'));
     // mobiliář / zeleň (props) — keř, strom, lampa, zastávka, kytky, koš, popelnice
     loadImg('strom','assets/props/strom_clean.png');
     ['ker','lampa','zastavka','kytky','kos','popelnice'].forEach(k=>loadImg(k,'assets/props/gen/'+k+'.png'));
@@ -722,7 +725,7 @@
       ['building-3d','building-top','building'].forEach(id=>{
         if(map.getLayer(id)){ try{
           map.setPaintProperty(id,'fill-extrusion-color',col);
-          map.setPaintProperty(id,'fill-extrusion-opacity',1);
+          map.setPaintProperty(id,'fill-extrusion-opacity',0.62);   // baráky lehce průhledné → vidíš cesty/zem za nimi
           map.setPaintProperty(id,'fill-extrusion-vertical-gradient',true);
           done=true;
         }catch(e){} }
@@ -731,7 +734,7 @@
         type:'fill-extrusion', minzoom:14, paint:{ 'fill-extrusion-color':col,
         'fill-extrusion-height':['coalesce',['get','render_height'],['get','height'],9],
         'fill-extrusion-base':['coalesce',['get','render_min_height'],['get','min_height'],0],
-        'fill-extrusion-opacity':1 } }); }catch(e){} }
+        'fill-extrusion-opacity':0.62 } }); }catch(e){} }
       // pestřejší zem/zeleň/voda — projdi vrstvy a přebarvi dle typu
       try{
         const layers = map.getStyle().layers || [];
