@@ -118,7 +118,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v91</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v92</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -198,7 +198,8 @@
       interactive: false,                        // kameru řídíme my (honící)
       attributionControl: false,                 // ve hře skryté; kredit je v menu (licenčně stačí)
     });
-    map.on('error', e => show('map: ' + (e&&e.error&&e.error.message||'?')));
+    map.on('error', e => { show('map: ' + (e&&e.error&&e.error.message||'?'));
+      clearTimeout(window._errT); window._errT=setTimeout(()=>show(''), 5000); });   // hláška sama zmizí
 
     // ── Měřítko: metry ↔ stupně ───────────────────────────────
     const MLAT = 111320;
@@ -731,7 +732,8 @@
         'sky-horizon-blend':0.55,'horizon-fog-blend':0.5 }); } catch(e){}
       // budovy: PLNÉ (neprůhledné) + PESTRÁ barva dle ID baráku (každý jiný, ne 2-3 dokola)
       const PAL=['#dcc7a4','#cdaa6e','#b9846a','#c2bcab','#a9b39a','#9fb0bb','#e0d2af','#c4895f','#b59f86','#d6b9d0'];
-      const col=['at',['floor',['%',['abs',['to-number',['coalesce',['id'],['get','render_height'],['get','height'],7]]],10]],['literal',PAL]];
+      const idx=['floor',['%',['abs',['to-number',['coalesce',['id'],['get','render_height'],['get','height'],7]]],10]];
+      const col=['match', idx]; for(let i=0;i<PAL.length;i++) col.push(i, PAL[i]); col.push(PAL[0]);   // match → stringy bere jako barvy
       let done=false;
       ['building-3d','building-top','building'].forEach(id=>{
         if(map.getLayer(id)){ try{

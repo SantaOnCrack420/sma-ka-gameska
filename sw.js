@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v91';   // bump: širší ulice, názvy ulic (bez čísel), perspektiva NPC, plné pestré baráky, atribuce do menu
+const CACHE = 'smazak-v92';   // bump: oprava výrazu barvy baráků (match místo at+literal) — chyba fill-extrusion-color
 const FILES = [
   './',
   './index.html',
