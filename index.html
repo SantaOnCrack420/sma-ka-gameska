@@ -118,7 +118,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v92</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v93</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -724,6 +724,20 @@
         g.strokeStyle='rgba(120,108,86,0.22)'; g.lineWidth=1;   // spáry dlažby
         g.beginPath(); g.moveTo(0,s/2); g.lineTo(s,s/2); g.moveTo(s/2,0); g.lineTo(s/2,s); g.stroke();
       }), {pixelRatio:2}); }catch(e){}
+      // ── Fasády s okny (3 typy: činžák / cihla / panelák) pro fill-extrusion-pattern ──
+      function facade(id, wall, frame, glass){ try{ if(map.hasImage(id))return; map.addImage(id, texTile(64,(g,s)=>{
+        g.fillStyle=wall; g.fillRect(0,0,s,s);
+        const m=9, gap=8, wW=(s-2*m-gap)/2, wH=(s-2*m-gap)/2;
+        for(let r=0;r<2;r++)for(let c=0;c<2;c++){
+          const x=m+c*(wW+gap), y=m+r*(wH+gap);
+          g.fillStyle=frame; g.fillRect(x-2,y-2,wW+4,wH+4);
+          g.fillStyle=glass[(r*2+c)%glass.length]; g.fillRect(x,y,wW,wH);
+          g.fillStyle='rgba(255,255,255,0.14)'; g.beginPath(); g.moveTo(x,y); g.lineTo(x+wW*0.5,y); g.lineTo(x,y+wH*0.5); g.fill();
+        }
+      }), {pixelRatio:1}); }catch(e){} }
+      facade('facade0','#cdbb9a','#7a6a52',['#34434e','#41525f','#2c3942','#536069']);   // béžový činžák, tmavá okna
+      facade('facade1','#b06f52','#5a3a2c',['#e8c24a','#34434e','#e8c24a','#41525f']);   // cihla, část oken svítí
+      facade('facade2','#a6abac','#5d6266',['#41525f','#536069','#34434e','#62727a']);   // šedý panelák
     }
 
     function stylize(){
@@ -734,6 +748,7 @@
       const PAL=['#dcc7a4','#cdaa6e','#b9846a','#c2bcab','#a9b39a','#9fb0bb','#e0d2af','#c4895f','#b59f86','#d6b9d0'];
       const idx=['floor',['%',['abs',['to-number',['coalesce',['id'],['get','render_height'],['get','height'],7]]],10]];
       const col=['match', idx]; for(let i=0;i<PAL.length;i++) col.push(i, PAL[i]); col.push(PAL[0]);   // match → stringy bere jako barvy
+      // (a) barevný základ — i fallback, kdyby okna selhala
       let done=false;
       ['building-3d','building-top','building'].forEach(id=>{
         if(map.getLayer(id)){ try{
@@ -748,16 +763,38 @@
         'fill-extrusion-height':['coalesce',['get','render_height'],['get','height'],9],
         'fill-extrusion-base':['coalesce',['get','render_min_height'],['get','min_height'],0],
         'fill-extrusion-opacity':1 } }); }catch(e){} }
+      // (b) OKNA: 3 typy fasád přes fill-extrusion-pattern (id%3). Přepínač — kdyby vypadalo blbě, dej false.
+      const WINDOWS = true;
+      if(WINDOWS && map.hasImage('facade0')){
+        let added=0;
+        for(let k=0;k<3;k++){ const lid='sim-bldg-'+k;
+          if(map.getLayer(lid)){ added++; continue; }
+          try{ map.addLayer({ id:lid, source:'openmaptiles','source-layer':'building',
+            type:'fill-extrusion', minzoom:14,
+            filter:['==',['%',['abs',['to-number',['coalesce',['id'],0]]],3],k],
+            paint:{ 'fill-extrusion-pattern':'facade'+k,
+              'fill-extrusion-height':['coalesce',['get','render_height'],['get','height'],9],
+              'fill-extrusion-base':['coalesce',['get','render_min_height'],['get','min_height'],0],
+              'fill-extrusion-opacity':1, 'fill-extrusion-vertical-gradient':true } });
+            if(map.getLayer(lid)) added++;
+          }catch(e){}
+        }
+        if(added===3){ ['building-3d','building-top','building','tst-3d'].forEach(id=>{
+          if(map.getLayer(id)){ try{ map.setLayoutProperty(id,'visibility','none'); }catch(e){} } }); }
+      }
       // pestřejší zem/zeleň/voda — projdi vrstvy a přebarvi dle typu
       try{
         const layers = map.getStyle().layers || [];
         for(const L of layers){
           const id=L.id, t=L.type;
-          if(t==='background'){ map.setPaintProperty(id,'background-color','#9ccb6e');
-            try{ if(map.hasImage('tex-grass')) map.setPaintProperty(id,'background-pattern','tex-grass'); }catch(e){} }
+          // ZEM = urbánní (dlažba/beton), ne zelená louka. Zeleň jen tam kde reálně je (parky).
+          if(t==='background'){ try{ map.setPaintProperty(id,'background-color','#bcb6a8'); }catch(e){} }
           else if(/water/.test(id) && t==='fill'){ try{map.setPaintProperty(id,'fill-color','#7fc2e8');}catch(e){} }
-          else if(/(park|grass|wood|forest|green|garden|pitch|golf)/.test(id) && t==='fill'){ try{
-            map.setPaintProperty(id,'fill-color','#86bd5b');
+          else if(/(residential|suburb|neighbourhood|built|urban|industrial|commercial|retail)/.test(id) && (t==='fill')){ try{
+            map.setPaintProperty(id,'fill-color','#c2bcae');   // zastavěné plochy = městská zem
+          }catch(e){} }
+          else if(/(park|grass|wood|forest|green|garden|pitch|golf|cemetery|scrub|meadow|recreation)/.test(id) && t==='fill'){ try{
+            map.setPaintProperty(id,'fill-color','#8bbf63');
             if(map.hasImage('tex-grass')) map.setPaintProperty(id,'fill-pattern','tex-grass');
           }catch(e){} }
           else if(/(sand|beach)/.test(id) && t==='fill'){ try{map.setPaintProperty(id,'fill-color','#f0e2b0');}catch(e){} }

@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v92';   // bump: oprava výrazu barvy baráků (match místo at+literal) — chyba fill-extrusion-color
+const CACHE = 'smazak-v93';   // bump: urbánní zem (ne louka) + okna na fasádách (3 typy) + realismus
 const FILES = [
   './',
   './index.html',
