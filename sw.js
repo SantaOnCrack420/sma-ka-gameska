@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v75';   // bump: oprava viditelnosti Šimmyho + proceduální hranolky/smažák + props (keře/lampy/zastávky)
+const CACHE = 'smazak-v76';   // bump: pevné velikosti všeho (žádné škálování dle vzdálenosti) + menší Šimmy + bližší zoom
 const FILES = [
   './',
   './index.html',

@@ -17,7 +17,7 @@
     #fx{position:fixed;inset:0;z-index:2;pointer-events:none}
     /* Šimmy je pevně uprostřed obrazovky (kamera ho sleduje).
        Explicitní šířka+výška (poměr 473:1017) — height:auto na iOS někdy = 0. */
-    #simmy{position:fixed;left:50%;top:50%;width:52px;height:112px;transform:translate(-50%,-90%);
+    #simmy{position:fixed;left:50%;top:50%;width:34px;height:73px;transform:translate(-50%,-90%);
       z-index:5;pointer-events:none;
       filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 4px 4px rgba(0,0,0,.55))}
     #hud{position:fixed;left:8px;top:8px;z-index:5;background:rgba(8,8,16,.82);color:#fff;
@@ -49,14 +49,14 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;left:5px;bottom:3px;z-index:9998;color:#fff;opacity:.55;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">MapLibre v75</div>
+  <div id="ver" style="position:fixed;left:5px;bottom:3px;z-index:9998;color:#fff;opacity:.55;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">MapLibre v76</div>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
   const show = m => document.getElementById('err').textContent = m;
   try {
     const SPAWN = [18.6285, 49.7464];           // Český Těšín
     let lng = SPAWN[0], lat = SPAWN[1];
-    const PITCH = 62, ZOOM = 18.7;
+    const PITCH = 62, ZOOM = 19.3;
     let bearing = 0;                            // mění "oko" (otáčení pohledu)
 
     const map = new maplibregl.Map({
@@ -91,11 +91,8 @@
     CIVIL.forEach(k=>loadImg(k,'assets/npc/'+k+'.png'));
     ENEMY.forEach(k=>loadImg(k,'assets/enemy/gen/'+k+'.png'));
     // mobiliář / zeleň (props) — keř, strom, lampa, zastávka, kytky, koš, popelnice
-    const PROP_KEYS = ['ker','strom','lampa','zastavka','kytky','kos','popelnice'];
     loadImg('strom','assets/props/strom_clean.png');
     ['ker','lampa','zastavka','kytky','kos','popelnice'].forEach(k=>loadImg(k,'assets/props/gen/'+k+'.png'));
-    // přibližná výška propu v "metrech světa" pro měřítko (vyšší = větší)
-    const PROP_H = { strom:6, zastavka:3, lampa:5, ker:1.6, kytky:0.8, kos:1.1, popelnice:1.4 };
 
     // ── Stav hry ──────────────────────────────────────────────
     let score = 0, lives = 3, hurtCd = 0, smazCd = 0, gameOver = false;
@@ -330,8 +327,11 @@
       fctx.setTransform(dpr,0,0,dpr,0,0); }
     addEventListener('resize', sizeFx); sizeFx();
 
-    // měřítko spritu dle vzdálenosti (blíž = větší). Konzistentní díky honící kameře.
-    const spriteScale = dM => Math.max(0.2, Math.min(1.4, 15/(7+dM)));
+    // PEVNÉ velikosti (px) — všechno stejně velké bez ohledu na vzdálenost.
+    // Šimmy DOM výška = 73px; NPC sladěné na stejnou výšku.
+    const HUMAN_H = 70;
+    const PROP_PX = { strom:138, zastavka:74, lampa:120, ker:40, kytky:22, kos:34, popelnice:42 };
+    const FRY_PX = 24, SMAZ_PX = 38, PART_R = 4;
 
     function rrect(g,x,y,w,h,r){ g.beginPath();
       g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
@@ -374,16 +374,15 @@
 
       // props + NPC dohromady, seřazené dle vzdálenosti (vzdálené první = správné překrytí)
       const drawList=[];
-      for(const o of props) drawList.push({o, wh:(PROP_H[o.key]||2), key:o.key, face:1, hit:0, prop:true});
-      for(const o of npcs){ if(o.hp>0) drawList.push({o, wh:3.3, key:o.key, face:o.face, hit:o.hit, enemy:o.enemy}); }
+      for(const o of props) drawList.push({o, hpx:(PROP_PX[o.key]||40), key:o.key, face:1, hit:0, prop:true});
+      for(const o of npcs){ if(o.hp>0) drawList.push({o, hpx:HUMAN_H, key:o.key, face:o.face, hit:o.hit, enemy:o.enemy}); }
       drawList.sort((a,b)=>distM(lng,lat,b.o.lng,b.o.lat)-distM(lng,lat,a.o.lng,a.o.lat));
 
       for(const it of drawList){
         const o=it.o, p=map.project([o.lng,o.lat]);
         if(p.x<-90||p.x>innerWidth+90||p.y<-160||p.y>innerHeight+90) continue;
-        const dM=distM(lng,lat,o.lng,o.lat), sc=spriteScale(dM);
         const im=SPRITES[it.key];
-        const h=it.wh*22*sc;
+        const h=it.hpx;   // PEVNÁ výška px (žádné škálování dle vzdálenosti)
         const w=(im && im._ok && im.naturalHeight) ? h*(im.naturalWidth/im.naturalHeight) : h*0.4;
         // stín
         fctx.globalAlpha=0.26; fctx.fillStyle='#000';
@@ -402,18 +401,15 @@
       // particly
       for(const pt of parts){ const p=map.project([pt.lng,pt.lat]);
         fctx.globalAlpha=Math.max(0,Math.min(1,pt.life/0.5)); fctx.fillStyle=pt.col;
-        const r=Math.max(1.5, 9*spriteScale(distM(lng,lat,pt.lng,pt.lat)));
-        fctx.beginPath(); fctx.arc(p.x,p.y,r,0,Math.PI*2); fctx.fill(); }
+        fctx.beginPath(); fctx.arc(p.x,p.y,PART_R,0,Math.PI*2); fctx.fill(); }
       fctx.globalAlpha=1;
 
-      // hranolky (proceduální kornout)
+      // hranolky (proceduální kornout) — pevná velikost
       for(const f of fries){ const p=map.project([f.lng,f.lat]);
-        const s=34*spriteScale(distM(lng,lat,f.lng,f.lat)); if(s<5)continue;
-        fctx.save(); fctx.translate(p.x,p.y); drawFries(fctx,s); fctx.restore(); }
-      // smažák (rotující smažený sýr)
+        fctx.save(); fctx.translate(p.x,p.y); drawFries(fctx,FRY_PX); fctx.restore(); }
+      // smažák (rotující smažený sýr) — pevná velikost
       for(const sm of smazaks){ const p=map.project([sm.lng,sm.lat]);
-        const s=48*spriteScale(distM(lng,lat,sm.lng,sm.lat));
-        fctx.save(); fctx.translate(p.x,p.y); fctx.rotate(sm.t*0.5); drawSmaz(fctx,s); fctx.restore(); }
+        fctx.save(); fctx.translate(p.x,p.y); fctx.rotate(sm.t*0.5); drawSmaz(fctx,SMAZ_PX); fctx.restore(); }
       fctx.textAlign='center'; fctx.textBaseline='middle';
 
       // popup hláška nad Šimmym
