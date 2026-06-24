@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v90';   // bump: +3 animované NPC (manažer, ožralá, dědek) ve složce pohyblive_npc
+const CACHE = 'smazak-v91';   // bump: širší ulice, názvy ulic (bez čísel), perspektiva NPC, plné pestré baráky, atribuce do menu
 const FILES = [
   './',
   './index.html',

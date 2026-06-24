@@ -85,6 +85,7 @@
     .nickline{font:500 13px Oswald,sans-serif;color:#cfd3e6;margin-top:12px}
     .nickline b{color:#ffd23f}
     .nickline span{cursor:pointer;text-decoration:underline;color:#ffd23f}
+    .mapattr{font:500 10px Oswald,sans-serif;color:#7c84a0;margin-top:10px;opacity:.8}
     .srow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 2px;
       font:500 15px Oswald,sans-serif;color:#e7e7ef}
     .srow label{display:flex;align-items:center;gap:8px;cursor:pointer}
@@ -117,7 +118,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v90</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v91</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -135,6 +136,7 @@
         <button id="setBtn" class="mbtn">⚙️ NASTAVENÍ</button>
       </div>
       <div class="nickline">Hraješ jako <b id="nickLabel">—</b> <span id="nickChange">změnit</span></div>
+      <div class="mapattr">🗺️ Mapa: © OpenStreetMap · OpenFreeMap</div>
     </div>
   </div>
 
@@ -194,10 +196,8 @@
       style: 'https://tiles.openfreemap.org/styles/liberty',
       center: SPAWN, zoom: ZOOM, pitch: PITCH, bearing: bearing, maxPitch: 75,
       interactive: false,                        // kameru řídíme my (honící)
-      attributionControl: false,                 // přidáme ručně jako kompaktní ⓘ vlevo dole
+      attributionControl: false,                 // ve hře skryté; kredit je v menu (licenčně stačí)
     });
-    // Kredit OSM je licenčně povinný — schováme do malého ⓘ (rozbalí se ťuknutím), mimo herní tlačítka.
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     map.on('error', e => show('map: ' + (e&&e.error&&e.error.message||'?')));
 
     // ── Měřítko: metry ↔ stupně ───────────────────────────────
@@ -583,11 +583,12 @@
       fctx.setTransform(dpr,0,0,dpr,0,0); }
     addEventListener('resize', sizeFx); sizeFx();
 
-    // PEVNÉ velikosti (px) — všechno stejně velké bez ohledu na vzdálenost.
-    // Šimmy DOM výška = 73px; NPC sladěné na stejnou výšku.
-    const HUMAN_H = 52;
-    const PROP_PX = { strom:104, zastavka:56, lampa:92, ker:30, kytky:17, kos:26, popelnice:32 };
+    // Základní velikosti (px) — výška NPC/props; reálně se násobí distScale (perspektiva).
+    const HUMAN_H = 56;
+    const PROP_PX = { strom:112, zastavka:60, lampa:100, ker:32, kytky:18, kos:28, popelnice:34 };
     const FRY_PX = 19, SMAZ_PX = 30, PART_R = 3.5;
+    // perspektiva: blízko = větší, daleko = menší (dM = vzdálenost od hráče v metrech)
+    const distScale = dM => Math.max(0.5, Math.min(1.18, 20/(14+dM*0.42)));
 
     function rrect(g,x,y,w,h,r){ g.beginPath();
       g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
@@ -643,7 +644,8 @@
         const o=it.o, p=map.project([o.lng,o.lat]);
         if(p.x<-90||p.x>innerWidth+90||p.y<-160||p.y>innerHeight+90) continue;
         const im=SPRITES[it.key];
-        const h=it.hpx;   // PEVNÁ výška px (žádné škálování dle vzdálenosti)
+        const dM=distM(lng,lat,o.lng,o.lat);
+        const h=it.hpx * distScale(dM);   // perspektiva: daleko = menší
         const nf=(ANIM[it.key] && ANIM[it.key].frames) || 1;    // počet snímků (animace)
         const sw=(im && im._ok && im.naturalHeight) ? im.naturalWidth/nf : 0;   // šířka 1 snímku ve zdroji
         const w=(sw) ? h*(sw/im.naturalHeight) : h*0.4;
@@ -668,12 +670,12 @@
         fctx.beginPath(); fctx.arc(p.x,p.y,PART_R,0,Math.PI*2); fctx.fill(); }
       fctx.globalAlpha=1;
 
-      // hranolky (proceduální kornout) — pevná velikost
+      // hranolky (proceduální kornout) — měřítko dle vzdálenosti
       for(const f of fries){ const p=map.project([f.lng,f.lat]);
-        fctx.save(); fctx.translate(p.x,p.y); drawFries(fctx,FRY_PX); fctx.restore(); }
-      // smažák (rotující smažený sýr) — pevná velikost
+        fctx.save(); fctx.translate(p.x,p.y); drawFries(fctx,FRY_PX*distScale(distM(lng,lat,f.lng,f.lat))); fctx.restore(); }
+      // smažák (rotující smažený sýr)
       for(const sm of smazaks){ const p=map.project([sm.lng,sm.lat]);
-        fctx.save(); fctx.translate(p.x,p.y); fctx.rotate(sm.t*0.5); drawSmaz(fctx,SMAZ_PX); fctx.restore(); }
+        fctx.save(); fctx.translate(p.x,p.y); fctx.rotate(sm.t*0.5); drawSmaz(fctx,SMAZ_PX*distScale(distM(lng,lat,sm.lng,sm.lat))); fctx.restore(); }
       fctx.textAlign='center'; fctx.textBaseline='middle';
 
       // popup hláška nad Šimmym
@@ -727,15 +729,14 @@
       makeTextures();
       try { map.setSky({ 'sky-color':'#8fc1ee','horizon-color':'#dfeaf4','fog-color':'#e9eef5',
         'sky-horizon-blend':0.55,'horizon-fog-blend':0.5 }); } catch(e){}
-      // budovy: teplý gradient dle výšky + pestrá variace dle ID baráku
-      const col = ['interpolate',['linear'],
-        ['coalesce',['get','render_height'],['get','height'],8],
-        0,'#f0dcc0', 8,'#e3c79f', 18,'#d2b184', 35,'#c89a86', 70,'#b08a9a'];
+      // budovy: PLNÉ (neprůhledné) + PESTRÁ barva dle ID baráku (každý jiný, ne 2-3 dokola)
+      const PAL=['#dcc7a4','#cdaa6e','#b9846a','#c2bcab','#a9b39a','#9fb0bb','#e0d2af','#c4895f','#b59f86','#d6b9d0'];
+      const col=['at',['floor',['%',['abs',['to-number',['coalesce',['id'],['get','render_height'],['get','height'],7]]],10]],['literal',PAL]];
       let done=false;
       ['building-3d','building-top','building'].forEach(id=>{
         if(map.getLayer(id)){ try{
           map.setPaintProperty(id,'fill-extrusion-color',col);
-          map.setPaintProperty(id,'fill-extrusion-opacity',0.62);   // baráky lehce průhledné → vidíš cesty/zem za nimi
+          map.setPaintProperty(id,'fill-extrusion-opacity',1);
           map.setPaintProperty(id,'fill-extrusion-vertical-gradient',true);
           done=true;
         }catch(e){} }
@@ -744,7 +745,7 @@
         type:'fill-extrusion', minzoom:14, paint:{ 'fill-extrusion-color':col,
         'fill-extrusion-height':['coalesce',['get','render_height'],['get','height'],9],
         'fill-extrusion-base':['coalesce',['get','render_min_height'],['get','min_height'],0],
-        'fill-extrusion-opacity':0.62 } }); }catch(e){} }
+        'fill-extrusion-opacity':1 } }); }catch(e){} }
       // pestřejší zem/zeleň/voda — projdi vrstvy a přebarvi dle typu
       try{
         const layers = map.getStyle().layers || [];
@@ -761,14 +762,36 @@
         }
       }catch(e){}
       styleRoads();
+      styleLabels();
+    }
+
+    // ── Popisky: bílé NÁZVY ulic podél silnice, SKRYTÁ čísla cest (shieldy) ──
+    function styleLabels(){
+      let layers=[]; try{ layers=map.getStyle().layers||[]; }catch(e){ return; }
+      for(const L of layers){
+        if(L.type!=='symbol') continue;
+        const id=L.id;
+        try{
+          if(/shield/.test(id)){ map.setLayoutProperty(id,'visibility','none'); continue; }   // čísla silnic pryč
+          if(/highway-name/.test(id) || L['source-layer']==='transportation_name'){
+            map.setLayoutProperty(id,'visibility','visible');
+            map.setLayoutProperty(id,'symbol-placement','line');
+            map.setLayoutProperty(id,'text-field',['coalesce',['get','name'],['get','name:cs'],['get','name:latin'],'']);
+            map.setLayoutProperty(id,'text-size',13);
+            map.setPaintProperty(id,'text-color','#ffffff');
+            map.setPaintProperty(id,'text-halo-color','#2b2b33');
+            map.setPaintProperty(id,'text-halo-width',1.8);
+          }
+        }catch(e){}
+      }
     }
 
     // ── Silnice profi: tmavý asfalt + světlé chodníky (casing) + středové čáry ──
     // Šířky škálujeme až do zoomu 22 (orig. styl je stropuje na z20 → po přiblížení
     // by byly cesty tenké). [vozovka@z20, vozovka@z22, chodník@z20, chodník@z22]
     const RW = {
-      motorway:[26,54,46,92], trunk:[24,50,42,84], secondary:[20,42,36,72],
-      minor:[20,44,34,70], service:[12,26,22,46], link:[12,26,20,42],
+      motorway:[36,76,62,128], trunk:[34,70,58,118], secondary:[28,58,50,100],
+      minor:[28,60,48,98], service:[17,36,30,62], link:[16,34,28,58],
     };
     function roadClass(id){
       if(/motorway/.test(id))return 'motorway';
