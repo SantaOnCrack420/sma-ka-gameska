@@ -24,7 +24,7 @@
 - [HOTOVO v94] Střešní čepice (`sim-roof`, plný plát navrch → okna jen na stěnách, ne na střeše) + širší chodníky/cesty/pěšiny (RW +30%, path widthExpr).
 
 ## Fronta 2 (vibe/hloubka — bezpečné MapLibre styling)
-- [ ] Atmosféra „zlatá hodina/podvečer": teplejší obloha + fog na horizontu (setSky tuning) → hloubka.
+- [HOTOVO v95] Atmosféra „zlatá hodina": teplý zlatavý horizont (setSky) → hloubka.
 - [ ] Stíny budov: fake — tmavší prstenec/AO u paty budov (fill-extrusion-vertical-gradient už je; zkus tmavší base barvu).
 - [ ] POI cedule obchodů (poi label styling) — názvy krámů = vibe.
 - [ ] Pouliční detaily: víc světel/dlažby textura na chodník (line-pattern už je) — případně lampy jako symboly.
