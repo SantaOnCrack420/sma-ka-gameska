@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v81';   // bump: profi silnice — tmavý asfalt + světlé chodníky (casing) + středové čáry
+const CACHE = 'smazak-v82';   // bump: větší svět (zoom 20.6) + širší silnice škálované se zoomem + rychlejší Šimmy
 const FILES = [
   './',
   './index.html',

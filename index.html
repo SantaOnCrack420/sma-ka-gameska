@@ -113,7 +113,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v81</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v82</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -182,7 +182,7 @@
   try {
     const SPAWN = [18.6285, 49.7464];           // Český Těšín
     let lng = SPAWN[0], lat = SPAWN[1];
-    const PITCH = 62, ZOOM = 19.9;
+    const PITCH = 62, ZOOM = 20.6;   // větší svět (ulice/baráky/tráva) vůči Šimonovi
     let bearing = 0;                            // mění "oko" (otáčení pohledu)
 
     const map = new maplibregl.Map({
@@ -470,7 +470,7 @@
     $('sfxVolSl').addEventListener('change',()=>sfx('click'));
 
     // ── Update logika ─────────────────────────────────────────
-    const SPEED = 9;                            // m/s Šimmy
+    const SPEED = 13;                           // m/s Šimmy (rychlejší chůze po zvětšených ulicích)
     let facing = 1, propTimer = 0;
     function update(dt){
       if(state==='MENU'){ bearing += dt*4; return; }   // titulka: pomalý nálet kamery
@@ -705,6 +705,21 @@
     }
 
     // ── Silnice profi: tmavý asfalt + světlé chodníky (casing) + středové čáry ──
+    // Šířky škálujeme až do zoomu 22 (orig. styl je stropuje na z20 → po přiblížení
+    // by byly cesty tenké). [vozovka@z20, vozovka@z22, chodník@z20, chodník@z22]
+    const RW = {
+      motorway:[26,54,46,92], trunk:[24,50,42,84], secondary:[20,42,36,72],
+      minor:[20,44,34,70], service:[12,26,22,46], link:[12,26,20,42],
+    };
+    function roadClass(id){
+      if(/motorway/.test(id))return 'motorway';
+      if(/trunk_primary/.test(id))return 'trunk';
+      if(/secondary_tertiary/.test(id))return 'secondary';
+      if(/service_track/.test(id))return 'service';
+      if(/link/.test(id))return 'link';
+      return 'minor';
+    }
+    const widthExpr=(a,b)=>['interpolate',['exponential',1.2],['zoom'],16,a*0.4,20,a,22,b];
     function styleRoads(){
       const ASPHALT='#565a66', SIDEWALK='#ddd6c6', PATH='#cdbfa6', LINE='#f4efe0';
       let layers=[]; try{ layers=map.getStyle().layers||[]; }catch(e){ return; }
@@ -712,20 +727,17 @@
         if(L.type!=='line' || L['source-layer']!=='transportation') continue;
         const id=L.id;
         if(/rail|hatching|waterway/.test(id)) continue;
+        const c=RW[roadClass(id)];
         try{
           if(/casing/.test(id)){
             if(/path|pedestrian/.test(id)) continue;
-            map.setPaintProperty(id,'line-color',SIDEWALK);
-            // rozšiř casing → vznikne viditelný chodník po stranách asfaltu
-            let w=24;
-            if(/motorway/.test(id))w=36; else if(/trunk_primary/.test(id))w=34;
-            else if(/secondary_tertiary/.test(id))w=28; else if(/service_track/.test(id))w=16;
-            else if(/link/.test(id))w=15; else if(/minor|street/.test(id))w=28;
-            map.setPaintProperty(id,'line-width',['interpolate',['exponential',1.2],['zoom'],14,2,17,w*0.35,20,w]);
+            map.setPaintProperty(id,'line-color',SIDEWALK);        // chodník
+            map.setPaintProperty(id,'line-width',widthExpr(c[2],c[3]));
           } else if(/path|pedestrian/.test(id)){
             map.setPaintProperty(id,'line-color',PATH);
           } else {
-            map.setPaintProperty(id,'line-color',ASPHALT);   // asfalt
+            map.setPaintProperty(id,'line-color',ASPHALT);         // asfalt
+            map.setPaintProperty(id,'line-width',widthExpr(c[0],c[1]));
           }
         }catch(e){}
       }
@@ -738,7 +750,7 @@
               ['match',['get','class'],['motorway','trunk','primary','secondary','tertiary'],true,false]],
             layout:{'line-cap':'butt','line-join':'round'},
             paint:{'line-color':LINE,'line-opacity':0.7,'line-dasharray':[2,3.5],
-              'line-width':['interpolate',['exponential',1.2],['zoom'],15,0.4,20,2.2]} }, before);
+              'line-width':['interpolate',['exponential',1.2],['zoom'],16,0.5,20,2.4,22,5]} }, before);
         }
       }catch(e){}
     }
