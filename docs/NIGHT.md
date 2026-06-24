@@ -26,6 +26,6 @@
 ## Fronta 2 (vibe/hloubka — bezpečné MapLibre styling)
 - [HOTOVO v95] Atmosféra „zlatá hodina": teplý zlatavý horizont (setSky) → hloubka.
 - [ ] Stíny budov: fake — tmavší prstenec/AO u paty budov (fill-extrusion-vertical-gradient už je; zkus tmavší base barvu).
-- [ ] POI cedule obchodů (poi label styling) — názvy krámů = vibe.
+- [HOTOVO v96] POI cedule obchodů (poi label styling, tmavý text + krémový halo) — vibe.
 - [ ] Pouliční detaily: víc světel/dlažby textura na chodník (line-pattern už je) — případně lampy jako symboly.
 - [ ] Mlha do dálky / fade vzdálených budov = hloubka.
