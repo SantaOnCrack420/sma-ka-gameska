@@ -118,7 +118,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v95</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v96</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -828,6 +828,13 @@
             map.setPaintProperty(id,'text-color','#ffffff');
             map.setPaintProperty(id,'text-halo-color','#2b2b33');
             map.setPaintProperty(id,'text-halo-width',1.8);
+          }
+          else if(/poi/.test(id) || L['source-layer']==='poi'){            // cedule obchodů = vibe
+            map.setLayoutProperty(id,'visibility','visible');
+            map.setLayoutProperty(id,'text-size',12);
+            map.setPaintProperty(id,'text-color','#3a2f24');
+            map.setPaintProperty(id,'text-halo-color','#fbf3e2');
+            map.setPaintProperty(id,'text-halo-width',1.7);
           }
         }catch(e){}
       }

@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v95';   // bump: atmosfera zlate hodiny (teply horizont, hloubka)
+const CACHE = 'smazak-v96';   // bump: cedule obchodu (POI popisky) — vibe
 const FILES = [
   './',
   './index.html',
