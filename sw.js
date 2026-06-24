@@ -1,9 +1,10 @@
-const CACHE = 'smazak-v82';   // bump: větší svět (zoom 20.6) + širší silnice škálované se zoomem + rychlejší Šimmy
+const CACHE = 'smazak-v83';   // bump: animovaná chůze Šimmyho (simmy_walk) + pohled z 3. osoby (pitch 70)
 const FILES = [
   './',
   './index.html',
   './manifest.json',
   './assets/simmy_char.png',
+  './assets/simmy_walk.png',
   './assets/menu_bg.png',
   './assets/npc/man_phone.png',
   './assets/npc/tourist.png',

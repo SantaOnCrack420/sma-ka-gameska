@@ -19,8 +19,12 @@
     #fx{position:fixed;inset:0;z-index:2;pointer-events:none}
     /* Šimmy je pevně uprostřed obrazovky (kamera ho sleduje).
        Explicitní šířka+výška (poměr 473:1017) — height:auto na iOS někdy = 0. */
-    #simmy{position:fixed;left:50%;top:50%;width:25px;height:54px;transform:translate(-50%,-90%);
+    /* Šimmy = animovaný chodící sprite (simmy_walk.png, 4 snímky vedle sebe).
+       background-size:400% → 1 snímek; frame se přepíná přes background-position-x v JS. */
+    #simmy{position:fixed;left:50%;top:50%;width:50px;height:52px;transform:translate(-50%,-88%);
       z-index:5;pointer-events:none;
+      background-image:url(assets/simmy_walk.png);background-repeat:no-repeat;
+      background-size:400% 100%;background-position:0% 0%;
       filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 4px 4px rgba(0,0,0,.55))}
     #hud{position:fixed;left:8px;top:8px;z-index:5;background:rgba(8,8,16,.82);color:#fff;
       padding:8px 12px;border:2px solid #ffd23f;border-radius:10px;font-size:15px;line-height:1.5;font-weight:600}
@@ -105,7 +109,7 @@
 <body>
   <div id="map"></div>
   <canvas id="fx"></canvas>
-  <img id="simmy" src="assets/simmy_char.png" alt="Šimmy" onerror="document.getElementById('err').textContent='Šimmy PNG se nenačetl!'">
+  <div id="simmy"></div>
   <div id="hud"><b>🍟 0</b> &nbsp; ❤️❤️❤️</div>
   <div id="joy"></div>
   <div id="hint">drž a táhni = otoč pohled</div>
@@ -113,7 +117,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v82</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v83</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -182,7 +186,7 @@
   try {
     const SPAWN = [18.6285, 49.7464];           // Český Těšín
     let lng = SPAWN[0], lat = SPAWN[1];
-    const PITCH = 62, ZOOM = 20.6;   // větší svět (ulice/baráky/tráva) vůči Šimonovi
+    const PITCH = 70, ZOOM = 20.6;   // vyšší náklon = pohled z 3. osoby (víc vidíš ulici před sebou)
     let bearing = 0;                            // mění "oko" (otáčení pohledu)
 
     const map = new maplibregl.Map({
@@ -471,7 +475,8 @@
 
     // ── Update logika ─────────────────────────────────────────
     const SPEED = 13;                           // m/s Šimmy (rychlejší chůze po zvětšených ulicích)
-    let facing = 1, propTimer = 0;
+    let facing = 1, propTimer = 0, walkT = 0, walkFrame = 0;
+    const simmyEl = document.getElementById('simmy');
     function update(dt){
       if(state==='MENU'){ bearing += dt*4; return; }   // titulka: pomalý nálet kamery
       if(state!=='PLAYING') return;
@@ -495,7 +500,11 @@
         lat += north*d/MLAT;
         lng += east*d/mlng(lat);
       }
-      document.getElementById('simmy').style.transform=`translate(-50%,-90%) scaleX(${facing})`;
+      // animace chůze: při pohybu cykluj 4 snímky, v klidu stůj na 1. snímku
+      if(len>0){ walkT+=dt; if(walkT>=0.11){ walkT-=0.11; walkFrame=(walkFrame+1)%4; } }
+      else { walkFrame=0; walkT=0; }
+      simmyEl.style.backgroundPositionX = (walkFrame*100/3)+'%';
+      simmyEl.style.transform=`translate(-50%,-88%) scaleX(${facing})`;
 
       if(firing) throwFry();
 
