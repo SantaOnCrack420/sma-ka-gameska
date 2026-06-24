@@ -117,7 +117,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v88</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v89</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -218,13 +218,16 @@
     // ── Sprite knihovna ───────────────────────────────────────
     const SPRITES = {};
     function loadImg(key, src){ const im=new Image(); im.onload=()=>im._ok=true; im.src=src; SPRITES[key]=im; }
-    // POZOR: většina extraktů je poškozená (díry/ukousnuté kusy/jen hlava) — zdroje
-    // mají zašeděné pozadí zapečené do pixelů, nejde z nich čistě klíčovat. Dokud
-    // David nepošle postavy na PLNÉ MAGENTĚ (#FF00FF), držíme jen ověřené.
-    const CIVIL = ['man_phone','tourist','babka','teenager','mama','vendor'];
-    const ENEMY = ['somrak','gauner'];
-    CIVIL.forEach(k=>loadImg(k,'assets/npc/'+k+'.png'));
-    ENEMY.forEach(k=>loadImg(k,'assets/enemy/gen/'+k+'.png'));
+    // Animované postavy — 6-snímkové sprite sheety (assets/chars/), čistě vyklíčované z magenty.
+    const ANIM = {
+      vietnamec:{frames:6,enemy:false},
+      policajt :{frames:6,enemy:false},
+      palkar   :{frames:6,enemy:true},
+      fetak    :{frames:6,enemy:true},
+    };
+    const CIVIL = ['vietnamec','policajt'];
+    const ENEMY = ['palkar','fetak'];
+    Object.keys(ANIM).forEach(k=>loadImg(k,'assets/chars/'+k+'.png'));
     // mobiliář / zeleň (props) — keř, strom, lampa, zastávka, kytky, koš, popelnice
     loadImg('strom','assets/props/strom_clean.png');
     ['ker','lampa','zastavka','kytky','kos','popelnice'].forEach(k=>loadImg(k,'assets/props/gen/'+k+'.png'));
@@ -236,13 +239,13 @@
     const rnd = a => a[(Math.random()*a.length)|0];
 
     // ── NPC ───────────────────────────────────────────────────
-    const NPC_MAX = 0;    // VYPNUTO — čistá plocha, čekáme na nové postavy (magenta zdroje)
+    const NPC_MAX = 12;
     function spawnNpc(near){
       const ang = Math.random()*Math.PI*2;
       const r = near ? (60+Math.random()*120) : (25+Math.random()*110);
-      const o = { lng, lat, dir: Math.random()*Math.PI*2, hit:0, flee:0, face:1 };
+      const o = { lng, lat, dir: Math.random()*Math.PI*2, hit:0, flee:0, face:1, af: Math.random()*6 };
       moveGeo(o, Math.cos(ang)*r, Math.sin(ang)*r);
-      const isEnemy = Math.random() < 0.28;
+      const isEnemy = Math.random() < 0.45;
       o.enemy = isEnemy;
       o.hp = isEnemy ? 3 : 1;
       o.key = isEnemy ? rnd(ENEMY) : rnd(CIVIL);
@@ -518,6 +521,7 @@
       while(npcs.length<NPC_MAX) spawnNpc(false);
       for(const o of npcs){
         if(o.hit>0) o.hit-=dt;
+        o.af = (o.af||0) + dt*9;          // posun snímku chůze (~9 fps)
         const d = distM(lng,lat,o.lng,o.lat);
         if(d>260){ recycleNpc(o); continue; }
         let spd, dE, dN;
@@ -637,15 +641,18 @@
         if(p.x<-90||p.x>innerWidth+90||p.y<-160||p.y>innerHeight+90) continue;
         const im=SPRITES[it.key];
         const h=it.hpx;   // PEVNÁ výška px (žádné škálování dle vzdálenosti)
-        const w=(im && im._ok && im.naturalHeight) ? h*(im.naturalWidth/im.naturalHeight) : h*0.4;
+        const nf=(ANIM[it.key] && ANIM[it.key].frames) || 1;    // počet snímků (animace)
+        const sw=(im && im._ok && im.naturalHeight) ? im.naturalWidth/nf : 0;   // šířka 1 snímku ve zdroji
+        const w=(sw) ? h*(sw/im.naturalHeight) : h*0.4;
         // stín
         fctx.globalAlpha=0.26; fctx.fillStyle='#000';
         fctx.beginPath(); fctx.ellipse(p.x, p.y, Math.max(4,w*0.34), Math.max(2,w*0.14), 0, 0, Math.PI*2); fctx.fill();
         fctx.globalAlpha=1;
         if(im && im._ok){
+          const fi = nf>1 ? (Math.floor(o.af||0)%nf) : 0;       // aktuální snímek chůze
           fctx.save(); fctx.translate(p.x,p.y); fctx.scale(it.face,1);
           if(it.hit>0) fctx.globalAlpha=0.55+0.45*Math.random();   // záblesk po zásahu
-          fctx.drawImage(im, -w/2, -h, w, h); fctx.restore(); fctx.globalAlpha=1;
+          fctx.drawImage(im, fi*sw, 0, sw, im.naturalHeight, -w/2, -h, w, h); fctx.restore(); fctx.globalAlpha=1;
         } else if(!it.prop){
           fctx.fillStyle=it.enemy?'#c0392b':'#3a6ea5';
           fctx.fillRect(p.x-w*0.5, p.y-h, w, h);
