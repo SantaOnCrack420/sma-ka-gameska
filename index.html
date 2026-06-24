@@ -19,12 +19,12 @@
     #fx{position:fixed;inset:0;z-index:2;pointer-events:none}
     /* Šimmy je pevně uprostřed obrazovky (kamera ho sleduje).
        Explicitní šířka+výška (poměr 473:1017) — height:auto na iOS někdy = 0. */
-    /* Šimmy = animovaný chodící sprite (simmy_walk.png, 4 snímky vedle sebe).
-       background-size:400% → 1 snímek; frame se přepíná přes background-position-x v JS. */
-    #simmy{position:fixed;left:50%;top:50%;width:50px;height:52px;transform:translate(-50%,-88%);
+    /* Šimmy = animovaný chodící sprite (simmy_walk.png = 8 snímků vedle sebe, každý 204×421).
+       background-size:800% → 1 snímek; frame se přepíná přes background-position-x v JS. */
+    #simmy{position:fixed;left:50%;top:50%;width:27px;height:56px;transform:translate(-50%,-88%);
       z-index:5;pointer-events:none;
       background-image:url(assets/simmy_walk.png);background-repeat:no-repeat;
-      background-size:400% 100%;background-position:0% 0%;
+      background-size:800% 100%;background-position:0% 0%;
       filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 4px 4px rgba(0,0,0,.55))}
     #hud{position:fixed;left:8px;top:8px;z-index:5;background:rgba(8,8,16,.82);color:#fff;
       padding:8px 12px;border:2px solid #ffd23f;border-radius:10px;font-size:15px;line-height:1.5;font-weight:600}
@@ -117,7 +117,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v84</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v85</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -500,10 +500,10 @@
         lat += north*d/MLAT;
         lng += east*d/mlng(lat);
       }
-      // animace chůze: při pohybu cykluj 4 snímky, v klidu stůj na 1. snímku
-      if(len>0){ walkT+=dt; if(walkT>=0.11){ walkT-=0.11; walkFrame=(walkFrame+1)%4; } }
+      // animace chůze: při pohybu cykluj 8 snímků, v klidu stůj na 1. snímku
+      if(len>0){ walkT+=dt; if(walkT>=0.08){ walkT-=0.08; walkFrame=(walkFrame+1)%8; } }
       else { walkFrame=0; walkT=0; }
-      simmyEl.style.backgroundPositionX = (walkFrame*100/3)+'%';
+      simmyEl.style.backgroundPositionX = (walkFrame*100/7)+'%';
       simmyEl.style.transform=`translate(-50%,-88%) scaleX(${facing})`;
 
       if(firing) throwFry();

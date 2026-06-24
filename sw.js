@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v84';   // bump: proceduální textury (tráva/asfalt/beton) + šipka nad hráčem
+const CACHE = 'smazak-v85';   // bump: oprava dvojitého Šimmyho — walk sheet má 8 snímků (ne 4)
 const FILES = [
   './',
   './index.html',
