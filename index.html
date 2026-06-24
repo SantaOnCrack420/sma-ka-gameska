@@ -17,7 +17,7 @@
     #fx{position:fixed;inset:0;z-index:2;pointer-events:none}
     /* Šimmy je pevně uprostřed obrazovky (kamera ho sleduje).
        Explicitní šířka+výška (poměr 473:1017) — height:auto na iOS někdy = 0. */
-    #simmy{position:fixed;left:50%;top:50%;width:34px;height:73px;transform:translate(-50%,-90%);
+    #simmy{position:fixed;left:50%;top:50%;width:25px;height:54px;transform:translate(-50%,-90%);
       z-index:5;pointer-events:none;
       filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 4px 4px rgba(0,0,0,.55))}
     #hud{position:fixed;left:8px;top:8px;z-index:5;background:rgba(8,8,16,.82);color:#fff;
@@ -49,14 +49,14 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;left:5px;bottom:3px;z-index:9998;color:#fff;opacity:.55;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">MapLibre v76</div>
+  <div id="ver" style="position:fixed;left:5px;bottom:3px;z-index:9998;color:#fff;opacity:.55;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">MapLibre v77</div>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
   const show = m => document.getElementById('err').textContent = m;
   try {
     const SPAWN = [18.6285, 49.7464];           // Český Těšín
     let lng = SPAWN[0], lat = SPAWN[1];
-    const PITCH = 62, ZOOM = 19.3;
+    const PITCH = 62, ZOOM = 19.9;
     let bearing = 0;                            // mění "oko" (otáčení pohledu)
 
     const map = new maplibregl.Map({
@@ -329,9 +329,9 @@
 
     // PEVNÉ velikosti (px) — všechno stejně velké bez ohledu na vzdálenost.
     // Šimmy DOM výška = 73px; NPC sladěné na stejnou výšku.
-    const HUMAN_H = 70;
-    const PROP_PX = { strom:138, zastavka:74, lampa:120, ker:40, kytky:22, kos:34, popelnice:42 };
-    const FRY_PX = 24, SMAZ_PX = 38, PART_R = 4;
+    const HUMAN_H = 52;
+    const PROP_PX = { strom:104, zastavka:56, lampa:92, ker:30, kytky:17, kos:26, popelnice:32 };
+    const FRY_PX = 19, SMAZ_PX = 30, PART_R = 3.5;
 
     function rrect(g,x,y,w,h,r){ g.beginPath();
       g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
@@ -367,9 +367,9 @@
       // stín + "stojíš tady" kroužek pod Šimmym (Šimmy = DOM img nad canvasem)
       const cx=innerWidth/2, cy=innerHeight/2;
       fctx.globalAlpha=0.32; fctx.fillStyle='#000';
-      fctx.beginPath(); fctx.ellipse(cx, cy, 16, 7, 0, 0, Math.PI*2); fctx.fill();
+      fctx.beginPath(); fctx.ellipse(cx, cy, 12, 5, 0, 0, Math.PI*2); fctx.fill();
       fctx.globalAlpha=0.5; fctx.strokeStyle='#ffd23f'; fctx.lineWidth=2;
-      fctx.beginPath(); fctx.ellipse(cx, cy, 18, 8, 0, 0, Math.PI*2); fctx.stroke();
+      fctx.beginPath(); fctx.ellipse(cx, cy, 13, 6, 0, 0, Math.PI*2); fctx.stroke();
       fctx.globalAlpha=1;
 
       // props + NPC dohromady, seřazené dle vzdálenosti (vzdálené první = správné překrytí)

@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v76';   // bump: pevné velikosti všeho (žádné škálování dle vzdálenosti) + menší Šimmy + bližší zoom
+const CACHE = 'smazak-v77';   // bump: menší postavy/props + bližší zoom (19.9) — svět větší vůči postavám
 const FILES = [
   './',
   './index.html',
