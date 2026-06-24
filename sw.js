@@ -1,9 +1,10 @@
-const CACHE = 'smazak-v79';   // bump: menu + hudba + zvuky + žebříček + nick + game-over (port ze starého enginu)
+const CACHE = 'smazak-v80';   // bump: hero artwork (menu_bg) na titulce + auto-update PWA (sama se refreshne)
 const FILES = [
   './',
   './index.html',
   './manifest.json',
   './assets/simmy_char.png',
+  './assets/menu_bg.png',
   './assets/npc/man_phone.png',
   './assets/npc/tourist.png',
   './assets/npc/babka.png',

@@ -59,8 +59,16 @@
       text-shadow:0 3px 0 #b8860b,0 5px 12px rgba(0,0,0,.6);margin:0}
     .sub{font:500 14px Oswald,sans-serif;color:#e7e7ef;margin:8px 0 4px;opacity:.92}
     .panel h2{font:700 24px Oswald,sans-serif;color:#ffd23f;margin:0 0 14px}
-    .menuSimmy{width:74px;height:auto;margin:10px auto 4px;display:block;
-      filter:drop-shadow(0 4px 6px rgba(0,0,0,.5))}
+    /* MENU jako titulní obrazovka: hero artwork na pozadí, logo nahoře, tlačítka dole */
+    #menu{flex-direction:column;justify-content:space-between;align-items:center;padding:0;
+      background:#0d0e1a;-webkit-backdrop-filter:none;backdrop-filter:none}
+    .heroImg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center}
+    .heroScrim{position:absolute;inset:0;pointer-events:none;
+      background:linear-gradient(180deg, rgba(8,8,18,.62) 0%, rgba(8,8,18,.05) 24%, rgba(8,8,18,0) 46%, rgba(8,8,18,.45) 74%, rgba(8,8,18,.92) 100%)}
+    .menuTop{position:relative;z-index:2;width:100%;box-sizing:border-box;text-align:center;
+      padding:calc(env(safe-area-inset-top,0px) + 26px) 16px 0}
+    .menuBottom{position:relative;z-index:2;width:100%;max-width:340px;box-sizing:border-box;
+      padding:0 20px calc(env(safe-area-inset-bottom,0px) + 22px)}
     .mbtn{display:block;width:100%;box-sizing:border-box;margin:9px 0;padding:14px;border-radius:13px;
       border:2px solid #3a3f63;background:#22253c;color:#fff;font:700 17px Oswald,sans-serif;
       cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .05s}
@@ -105,15 +113,18 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v79</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v80</div>
 
-  <!-- ── MENU (titulka) ── -->
+  <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
-    <div class="panel">
+    <img class="heroImg" src="assets/menu_bg.png" alt="">
+    <div class="heroScrim"></div>
+    <div class="menuTop">
       <div class="kicker">GTA&nbsp;7</div>
       <h1 class="logo">TĚŠÍN&nbsp;CITY</h1>
       <div class="sub">🍟 Smažák s Hranolkama DLC 🧀</div>
-      <img class="menuSimmy" src="assets/simmy_char.png" alt="">
+    </div>
+    <div class="menuBottom">
       <button id="playBtn" class="mbtn gold">▶ HRÁT</button>
       <div class="mrow">
         <button id="lbBtn" class="mbtn">🏆 TOP SMAŽKY</button>
@@ -700,7 +711,23 @@
   } catch(e){ show('init: '+e.message); }
   </script>
   <script>
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+    // Auto-update: po nasazení nové verze se PWA sama refreshne (žádné ruční mazání cache).
+    if ('serviceWorker' in navigator) {
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!reloaded) { reloaded = true; location.reload(); }
+      });
+      navigator.serviceWorker.register('sw.js').then(reg => {
+        reg.update();
+        setInterval(() => reg.update(), 60000);   // průběžně kontroluj novou verzi
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (nw) nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) location.reload();
+          });
+        });
+      }).catch(() => {});
+    }
   </script>
 </body>
 </html>
