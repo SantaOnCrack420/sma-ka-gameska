@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v78';   // bump: atribuce OSM schovaná do kompaktního ⓘ (vlevo dole, mimo tlačítka)
+const CACHE = 'smazak-v79';   // bump: menu + hudba + zvuky + žebříček + nick + game-over (port ze starého enginu)
 const FILES = [
   './',
   './index.html',
@@ -19,6 +19,16 @@ const FILES = [
   './assets/props/gen/kytky.png',
   './assets/props/gen/kos.png',
   './assets/props/gen/popelnice.png',
+  './assets/music.mp3',
+  './assets/sfx/click.wav',
+  './assets/sfx/shoot.wav',
+  './assets/sfx/hit.wav',
+  './assets/sfx/kill.wav',
+  './assets/sfx/pickup.wav',
+  './assets/sfx/hurt.wav',
+  './assets/sfx/boom.wav',
+  './assets/sfx/wave.wav',
+  './assets/sfx/gameover.wav',
   './assets/icon.png',
   './assets/icon-512.png',
   './assets/apple-touch-icon.png',
