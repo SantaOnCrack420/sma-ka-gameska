@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v86';   // bump: víc NPC (7 nepřátel + 9 civilů, ověřené čisté) + průhledné baráky
+const CACHE = 'smazak-v87';   // bump: roster zpět na ověřené (vadné extrakty odebrány) — čeká na magenta zdroje
 const FILES = [
   './',
   './index.html',
@@ -12,16 +12,8 @@ const FILES = [
   './assets/npc/teenager.png',
   './assets/npc/mama.png',
   './assets/npc/vendor.png',
-  './assets/npc/businessman.png',
-  './assets/npc/cop.png',
-  './assets/npc/jogger_f.png',
   './assets/enemy/gen/somrak.png',
   './assets/enemy/gen/gauner.png',
-  './assets/enemy/criminal.png',
-  './assets/enemy/thug.png',
-  './assets/enemy/pickpocket.png',
-  './assets/enemy/fetak.png',
-  './assets/enemy/psycho_kid.png',
   './assets/props/strom_clean.png',
   './assets/props/gen/ker.png',
   './assets/props/gen/lampa.png',

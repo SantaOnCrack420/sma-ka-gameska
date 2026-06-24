@@ -117,7 +117,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v86</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v87</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -218,13 +218,13 @@
     // ── Sprite knihovna ───────────────────────────────────────
     const SPRITES = {};
     function loadImg(key, src){ const im=new Image(); im.onload=()=>im._ok=true; im.src=src; SPRITES[key]=im; }
-    // jen ověřené ČISTĚ ořezané jednotlivé postavy (poměr <1, vizuálně zkontrolováno)
-    const CIVIL = ['man_phone','tourist','babka','teenager','mama','vendor','businessman','cop','jogger_f'];
-    const ENEMY = ['somrak','gauner','criminal','thug','pickpocket','fetak','psycho_kid'];
+    // POZOR: většina extraktů je poškozená (díry/ukousnuté kusy/jen hlava) — zdroje
+    // mají zašeděné pozadí zapečené do pixelů, nejde z nich čistě klíčovat. Dokud
+    // David nepošle postavy na PLNÉ MAGENTĚ (#FF00FF), držíme jen ověřené.
+    const CIVIL = ['man_phone','tourist','babka','teenager','mama','vendor'];
+    const ENEMY = ['somrak','gauner'];
     CIVIL.forEach(k=>loadImg(k,'assets/npc/'+k+'.png'));
-    loadImg('somrak','assets/enemy/gen/somrak.png');
-    loadImg('gauner','assets/enemy/gen/gauner.png');
-    ['criminal','thug','pickpocket','fetak','psycho_kid'].forEach(k=>loadImg(k,'assets/enemy/'+k+'.png'));
+    ENEMY.forEach(k=>loadImg(k,'assets/enemy/gen/'+k+'.png'));
     // mobiliář / zeleň (props) — keř, strom, lampa, zastávka, kytky, koš, popelnice
     loadImg('strom','assets/props/strom_clean.png');
     ['ker','lampa','zastavka','kytky','kos','popelnice'].forEach(k=>loadImg(k,'assets/props/gen/'+k+'.png'));
