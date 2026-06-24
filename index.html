@@ -8,62 +8,398 @@
   <meta name="theme-color" content="#1a1a2e">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <title>GTA 7: Těšín City — Smažák s Hranolkama DLC</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <title>GTA 7: Těšín City</title>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+  <style>
+    html,body{margin:0;height:100%;background:#1a1a2e;overflow:hidden;font-family:system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+    #map{position:absolute;inset:0}
+    /* FX overlay = NPC, hranolky, smažák, particly (kreslené přes 3D mapu) */
+    #fx{position:fixed;inset:0;z-index:2;pointer-events:none}
+    /* Šimmy je pevně uprostřed obrazovky (kamera ho sleduje) */
+    #simmy{position:fixed;left:50%;top:50%;width:38px;height:auto;transform:translate(-50%,-86%);
+      z-index:4;pointer-events:none;filter:drop-shadow(0 3px 3px rgba(0,0,0,.5))}
+    #hud{position:fixed;left:8px;top:8px;z-index:5;background:rgba(8,8,16,.82);color:#fff;
+      padding:8px 12px;border:2px solid #ffd23f;border-radius:10px;font-size:15px;line-height:1.5;font-weight:600}
+    #hud b{color:#ffd23f}
+    #joy{position:fixed;left:0;bottom:0;width:55%;height:55%;z-index:3}
+    .btn{position:fixed;z-index:6;border-radius:50%;background:rgba(8,8,16,.78);
+      border:2px solid #ffd23f;color:#ffd23f;display:flex;align-items:center;justify-content:center;
+      touch-action:none;font-weight:700}
+    #fire{right:18px;bottom:30px;width:88px;height:88px;font-size:38px}
+    #fire:active,#fire.act{background:#ffd23f;color:#1a1a2e}
+    #smaz{right:120px;bottom:46px;width:64px;height:64px;font-size:30px}
+    #smaz.cd{opacity:.4}
+    #eye{right:24px;bottom:140px;width:58px;height:58px;font-size:28px}
+    #eye.act{background:#ffd23f;color:#1a1a2e}
+    #hint{position:fixed;right:18px;bottom:204px;z-index:6;color:#ffd23f;font-size:11px;
+      background:#000a;padding:2px 6px;border-radius:6px}
+    #err{position:fixed;left:8px;bottom:8px;z-index:6;color:#ff6b6b;font:12px monospace;background:#000a;padding:4px 8px;border-radius:6px}
+  </style>
 </head>
 <body>
-  <!-- WebGL 3D renderer (spodní vrstva) -->
-  <canvas id="gameCanvas"></canvas>
-  <!-- 2D overlay pro menu/gameover (horní vrstva, viditelná jen při MENU/OVER) -->
-  <canvas id="menuCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
-  <div id="ver" style="position:fixed;left:5px;bottom:3px;z-index:9998;color:#fff;opacity:.55;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">3D v73</div>
-  <div id="ui">
-    <div id="lives"></div>
-    <div id="score">SKÓRE: 0</div>
-    <div id="power-indicator" class="hidden">⚡ GRANÁT BORDEL ⚡</div>
-  </div>
-  <div id="joystick-zone"></div>
-  <div id="nick">
-    <div class="nbox">
-      <h2>ZADEJ SVŮJ NICK</h2>
-      <input id="nickInput" maxlength="12" autocomplete="off" autocapitalize="off" placeholder="4–12 znaků">
-      <div id="nickErr"></div>
-      <button id="nickBtn">▶ POKRAČOVAT</button>
-    </div>
-  </div>
-  <div id="settings" class="overlay">
-    <div class="sbox">
-      <h2>⚙️ NASTAVENÍ</h2>
-      <div class="srow">
-        <label><input type="checkbox" id="musicOnCb"> Hudba</label>
-        <input type="range" id="musicVolSl" min="0" max="100">
-      </div>
-      <div class="srow">
-        <label><input type="checkbox" id="sfxOnCb"> Zvuky</label>
-        <input type="range" id="sfxVolSl" min="0" max="100">
-      </div>
-      <button id="settingsClose">ZAVŘÍT</button>
-    </div>
-  </div>
-  <div id="leaderboard" class="overlay">
-    <div class="sbox">
-      <h2>🏆 TOP SMAŽKY</h2>
-      <ol id="lbList"></ol>
-      <button id="lbClose">ZAVŘÍT</button>
-    </div>
-  </div>
-  <script src="assets/mapdata.js"></script>
-  <script src="assets/mapvec.js"></script>
-  <script src="assets/mappoi.js"></script>
-  <script src="assets/three.min.js"></script>
-  <script src="render3d.js"></script>
-  <script src="game.js"></script>
+  <div id="map"></div>
+  <canvas id="fx"></canvas>
+  <img id="simmy" src="assets/simmy_char.png" alt="Šimmy">
+  <div id="hud"><b>🍟 0</b> &nbsp; ❤️❤️❤️</div>
+  <div id="joy"></div>
+  <div id="hint">drž a táhni = otoč pohled</div>
+  <div id="eye" class="btn">👁</div>
+  <div id="smaz" class="btn">🧀</div>
+  <div id="fire" class="btn">🍟</div>
+  <div id="err"></div>
+  <div id="ver" style="position:fixed;left:5px;bottom:3px;z-index:9998;color:#fff;opacity:.55;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">MapLibre v74</div>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js');
+  const show = m => document.getElementById('err').textContent = m;
+  try {
+    const SPAWN = [18.6285, 49.7464];           // Český Těšín
+    let lng = SPAWN[0], lat = SPAWN[1];
+    const PITCH = 62, ZOOM = 18.7;
+    let bearing = 0;                            // mění "oko" (otáčení pohledu)
+
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: SPAWN, zoom: ZOOM, pitch: PITCH, bearing: bearing, maxPitch: 75,
+      interactive: false,                        // kameru řídíme my (honící)
+      attributionControl: true,
+    });
+    map.on('error', e => show('map: ' + (e&&e.error&&e.error.message||'?')));
+
+    // ── Měřítko: metry ↔ stupně ───────────────────────────────
+    const MLAT = 111320;
+    const mlng = la => 111320 * Math.cos(la*Math.PI/180);
+    // vzdálenost dvou geo bodů v metrech (lokální rovinná aproximace)
+    function distM(aLng,aLat,bLng,bLat){
+      const dx = (aLng-bLng)*mlng((aLat+bLat)/2);
+      const dy = (aLat-bLat)*MLAT;
+      return Math.hypot(dx,dy);
     }
+    // posuň geo bod o (east,north) metrů
+    function moveGeo(o, eastM, northM){
+      o.lat += northM/MLAT;
+      o.lng += eastM/mlng(o.lat);
+    }
+
+    // ── Sprite knihovna ───────────────────────────────────────
+    const SPRITES = {};
+    function loadImg(key, src){ const im=new Image(); im.onload=()=>im._ok=true; im.src=src; SPRITES[key]=im; }
+    const CIVIL = ['man_phone','tourist','babka','teenager','mama','vendor'];
+    const ENEMY = ['somrak','gauner'];
+    CIVIL.forEach(k=>loadImg(k,'assets/npc/'+k+'.png'));
+    ENEMY.forEach(k=>loadImg(k,'assets/enemy/gen/'+k+'.png'));
+
+    // ── Stav hry ──────────────────────────────────────────────
+    let score = 0, lives = 3, hurtCd = 0, smazCd = 0, gameOver = false;
+    const npcs = [], fries = [], smazaks = [], parts = [];
+    const TAUNTS = ['Rozmrdám ti xicht!','Neutíkej ty sračko!','Ukradnu ti parno!','Postava jak rotoped more!'];
+    const rnd = a => a[(Math.random()*a.length)|0];
+
+    // ── NPC ───────────────────────────────────────────────────
+    const NPC_MAX = 16;
+    function spawnNpc(near){
+      const ang = Math.random()*Math.PI*2;
+      const r = near ? (60+Math.random()*120) : (25+Math.random()*110);
+      const o = { lng, lat, dir: Math.random()*Math.PI*2, hit:0, flee:0, face:1 };
+      moveGeo(o, Math.cos(ang)*r, Math.sin(ang)*r);
+      const isEnemy = Math.random() < 0.28;
+      o.enemy = isEnemy;
+      o.hp = isEnemy ? 3 : 1;
+      o.key = isEnemy ? rnd(ENEMY) : rnd(CIVIL);
+      npcs.push(o);
+    }
+    function recycleNpc(o){
+      const ang = Math.random()*Math.PI*2, r = 90+Math.random()*90;
+      o.lng = lng; o.lat = lat; moveGeo(o, Math.cos(ang)*r, Math.sin(ang)*r);
+      o.hp = o.enemy ? 3 : 1; o.hit=0; o.flee=0; o.dir=Math.random()*Math.PI*2;
+    }
+
+    // ── Particly (splat) ──────────────────────────────────────
+    function boom(o, col, n){
+      for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2, s=2+Math.random()*6;
+        parts.push({ lng:o.lng, lat:o.lat, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.5, col }); }
+    }
+    let popMsg='', popT=0;
+    const popup = m => { popMsg=m; popT=1.4; };
+
+    // ── Házení ────────────────────────────────────────────────
+    function nearestNpc(maxM){
+      let best=null, bd=maxM;
+      for(const o of npcs){ if(o.hp<=0)continue; const d=distM(lng,lat,o.lng,o.lat); if(d<bd){bd=d;best=o;} }
+      return best;
+    }
+    let fireCd=0;
+    function throwFry(){
+      if(fireCd>0) return; fireCd=0.16;
+      const t = nearestNpc(80);
+      let th = bearing*Math.PI/180;            // default: kam koukáš
+      let dirE, dirN;
+      if(t){ const dx=(t.lng-lng)*mlng(lat), dy=(t.lat-lat)*MLAT; const l=Math.hypot(dx,dy)||1; dirE=dx/l; dirN=dy/l; }
+      else { dirE=Math.sin(th); dirN=Math.cos(th); }
+      fries.push({ lng, lat, vx:dirE*34, vy:dirN*34, life:1.1 });
+    }
+    function throwSmaz(){
+      if(smazCd>0) return; smazCd=5;
+      const t = nearestNpc(140);
+      let dirE, dirN;
+      if(t){ const dx=(t.lng-lng)*mlng(lat), dy=(t.lat-lat)*MLAT; const l=Math.hypot(dx,dy)||1; dirE=dx/l; dirN=dy/l; }
+      else { const th=bearing*Math.PI/180; dirE=Math.sin(th); dirN=Math.cos(th); }
+      smazaks.push({ lng, lat, vx:dirE*22, vy:dirN*22, life:1.6, t:0 });
+    }
+    function smazBoom(s){
+      boom(s,'#f4c430',22); boom(s,'#e8a020',14);
+      for(const o of npcs){ if(o.hp>0 && distM(s.lng,s.lat,o.lng,o.lat)<14){
+        score += o.enemy?20:8; o.hit=0.25; boom(o,'#f4c430',8); recycleNpc(o); } }
+      updateHud();
+    }
+
+    function hudHearts(){ return '❤️'.repeat(Math.max(0,lives)) || '💀'; }
+    function updateHud(){ document.getElementById('hud').innerHTML = '<b>🍟 '+score+'</b> &nbsp; '+hudHearts(); }
+
+    function endGame(){
+      gameOver=true;
+      document.getElementById('hud').innerHTML='<b>💀 KONEC</b><br>Skóre: '+score+'<br><span style="font-size:12px">obnov stránku = hrát znovu</span>';
+    }
+
+    // ── Ovládání ──────────────────────────────────────────────
+    const keys = {};
+    addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true;
+      if(e.key===' '||e.key==='f') throwFry(); if(e.key==='e') throwSmaz(); });
+    addEventListener('keyup',   e => keys[e.key.toLowerCase()] = false);
+
+    // plovoucí joystick (levá spodní část)
+    let joy = null;
+    const jz = document.getElementById('joy');
+    jz.addEventListener('touchstart', e=>{ const t=e.changedTouches[0]; joy={ox:t.clientX,oy:t.clientY,dx:0,dy:0}; }, {passive:true});
+    jz.addEventListener('touchmove',  e=>{ if(!joy)return; const t=e.changedTouches[0]; joy.dx=t.clientX-joy.ox; joy.dy=t.clientY-joy.oy; e.preventDefault(); }, {passive:false});
+    const jEnd=()=>joy=null;
+    jz.addEventListener('touchend',jEnd); jz.addEventListener('touchcancel',jEnd);
+
+    // tlačítko hranolky — drž = pal
+    const fireBtn=document.getElementById('fire');
+    let firing=false;
+    const fStart=e=>{ firing=true; fireBtn.classList.add('act'); e.preventDefault(); };
+    const fStop =e=>{ firing=false; fireBtn.classList.remove('act'); };
+    fireBtn.addEventListener('pointerdown',fStart); fireBtn.addEventListener('pointerup',fStop);
+    fireBtn.addEventListener('pointercancel',fStop); fireBtn.addEventListener('pointerleave',fStop);
+    // tlačítko smažák
+    document.getElementById('smaz').addEventListener('pointerdown',e=>{ throwSmaz(); e.preventDefault(); });
+
+    // "Oko" — drž a táhni = otoč kameru
+    const eye = document.getElementById('eye');
+    let eyeOn=false, eyeX=0, eyeBase=0;
+    eye.addEventListener('pointerdown', e=>{ eyeOn=true; eyeX=e.clientX; eyeBase=bearing;
+      eye.classList.add('act'); eye.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation(); });
+    eye.addEventListener('pointermove', e=>{ if(!eyeOn)return; bearing=eyeBase+(e.clientX-eyeX)*0.6; e.preventDefault(); e.stopPropagation(); });
+    const eyeUp = e=>{ if(!eyeOn)return; eyeOn=false; eye.classList.remove('act'); if(e)e.stopPropagation(); };
+    eye.addEventListener('pointerup', eyeUp); eye.addEventListener('pointercancel', eyeUp);
+
+    // ── Update logika ─────────────────────────────────────────
+    const SPEED = 9;                            // m/s Šimmy
+    let facing = 1;
+    function update(dt){
+      if(gameOver) return;
+      if(fireCd>0) fireCd-=dt;
+      if(smazCd>0){ smazCd-=dt; document.getElementById('smaz').classList.toggle('cd', smazCd>0); }
+      if(hurtCd>0) hurtCd-=dt;
+      if(popT>0) popT-=dt;
+
+      // vstup → směr (relativně ke kameře dle bearing)
+      let ix=0, iy=0;
+      if(keys['a']||keys['arrowleft'])ix-=1; if(keys['d']||keys['arrowright'])ix+=1;
+      if(keys['w']||keys['arrowup'])iy+=1;   if(keys['s']||keys['arrowdown'])iy-=1;
+      if(joy){ const L=Math.hypot(joy.dx,joy.dy); if(L>10){ const m=Math.min(L,60)/60; ix+=joy.dx/L*m; iy-=joy.dy/L*m; } }
+      const len=Math.hypot(ix,iy);
+      if(len>0){
+        if(ix>0.1)facing=1; else if(ix<-0.1)facing=-1;
+        const th=bearing*Math.PI/180;
+        const east  = ix*Math.cos(th)+iy*Math.sin(th);
+        const north =-ix*Math.sin(th)+iy*Math.cos(th);
+        const d=SPEED*dt*Math.min(1,len);
+        lat += north*d/MLAT;
+        lng += east*d/mlng(lat);
+      }
+      document.getElementById('simmy').style.transform=`translate(-50%,-86%) scaleX(${facing})`;
+
+      if(firing) throwFry();
+
+      // NPC
+      while(npcs.length<NPC_MAX) spawnNpc(false);
+      for(const o of npcs){
+        if(o.hit>0) o.hit-=dt;
+        const d = distM(lng,lat,o.lng,o.lat);
+        if(d>260){ recycleNpc(o); continue; }
+        let spd, dE, dN;
+        if(o.flee>0){
+          o.flee-=dt; spd=4.5;
+          const dx=(o.lng-lng)*mlng(lat), dy=(o.lat-lat)*MLAT, l=Math.hypot(dx,dy)||1; dE=dx/l; dN=dy/l;
+        } else if(o.enemy && d<55){
+          spd=3.2;
+          const dx=(lng-o.lng)*mlng(lat), dy=(lat-o.lat)*MLAT, l=Math.hypot(dx,dy)||1; dE=dx/l; dN=dy/l;
+          if(d<3 && hurtCd<=0){
+            lives--; hurtCd=1.2; updateHud(); boom({lng,lat},'#ff3b3b',10); popup('👊 Dostal ses!');
+            if(lives<=0) endGame();
+          }
+        } else {
+          if(Math.random()<0.02) o.dir+=(Math.random()-0.5)*1.2;
+          spd=1.3; dE=Math.cos(o.dir); dN=Math.sin(o.dir);
+        }
+        if(dE>0.1)o.face=1; else if(dE<-0.1)o.face=-1;
+        moveGeo(o, dE*spd*dt, dN*spd*dt);
+      }
+
+      // hranolky
+      for(const f of fries){
+        f.life-=dt; moveGeo(f, f.vx*dt, f.vy*dt);
+        for(const o of npcs){
+          if(o.hp>0 && distM(f.lng,f.lat,o.lng,o.lat)<4){
+            o.hp--; o.hit=0.3; f.life=0; boom(o,'#e8a020',7);
+            if(!o.enemy) o.flee=2.5;
+            if(o.hp<=0){ score+=o.enemy?20:8; updateHud(); boom(o,'#f4c430',12);
+              popup(o.enemy?'🍟 '+rnd(TAUNTS):'🍟 Schytal hranolky!'); recycleNpc(o); }
+            break;
+          }
+        }
+      }
+      for(let i=fries.length-1;i>=0;i--) if(fries[i].life<=0) fries.splice(i,1);
+
+      // smažák
+      for(const s of smazaks){
+        s.life-=dt; s.t+=dt*8; moveGeo(s, s.vx*dt, s.vy*dt);
+        const hit = npcs.some(o=>o.hp>0 && distM(s.lng,s.lat,o.lng,o.lat)<6);
+        if(hit || s.life<=0){ smazBoom(s); s.dead=true; }
+      }
+      for(let i=smazaks.length-1;i>=0;i--) if(smazaks[i].dead||smazaks[i].life<=0) smazaks.splice(i,1);
+
+      // particly
+      for(const p of parts){ p.life-=dt; moveGeo(p, p.vx*dt, p.vy*dt); }
+      for(let i=parts.length-1;i>=0;i--) if(parts[i].life<=0) parts.splice(i,1);
+    }
+
+    // ── Render FX overlay ─────────────────────────────────────
+    const fx = document.getElementById('fx');
+    const fctx = fx.getContext('2d');
+    let dpr = Math.min(devicePixelRatio||1, 2);
+    function sizeFx(){ dpr=Math.min(devicePixelRatio||1,2);
+      fx.width=innerWidth*dpr; fx.height=innerHeight*dpr; fx.style.width=innerWidth+'px'; fx.style.height=innerHeight+'px';
+      fctx.setTransform(dpr,0,0,dpr,0,0); }
+    addEventListener('resize', sizeFx); sizeFx();
+
+    // měřítko spritu dle vzdálenosti (blíž = větší). Konzistentní díky honící kameře.
+    const spriteScale = dM => Math.max(0.2, Math.min(1.4, 15/(7+dM)));
+
+    function render(){
+      fctx.clearRect(0,0,innerWidth,innerHeight);
+      // seřaď podle vzdálenosti (vzdálené první = správné překrytí)
+      const drawList=[];
+      for(const o of npcs){ if(o.hp>0) drawList.push(o); }
+      drawList.sort((a,b)=>distM(lng,lat,b.lng,b.lat)-distM(lng,lat,a.lng,a.lat));
+
+      for(const o of drawList){
+        const p = map.project([o.lng,o.lat]);
+        if(p.x<-80||p.x>innerWidth+80||p.y<-120||p.y>innerHeight+80) continue;
+        const dM = distM(lng,lat,o.lng,o.lat);
+        const sc = spriteScale(dM);
+        const im = SPRITES[o.key];
+        const h = 72*sc;
+        const w = (im && im._ok && im.naturalHeight) ? h*(im.naturalWidth/im.naturalHeight) : 30*sc;
+        // stín
+        fctx.globalAlpha=0.28; fctx.fillStyle='#000';
+        fctx.beginPath(); fctx.ellipse(p.x, p.y, w*0.32, w*0.13, 0, 0, Math.PI*2); fctx.fill();
+        fctx.globalAlpha=1;
+        if(im && im._ok){
+          fctx.save(); fctx.translate(p.x,p.y); fctx.scale(o.face,1);
+          if(o.hit>0){ fctx.globalAlpha=0.6+0.4*Math.random(); }   // záblesk po zásahu
+          fctx.drawImage(im, -w/2, -h, w, h); fctx.restore();
+          fctx.globalAlpha=1;
+        } else {
+          fctx.fillStyle=o.enemy?'#c0392b':'#3a6ea5';
+          fctx.fillRect(p.x-w*0.18, p.y-h, w*0.36, h);
+        }
+      }
+
+      // particly
+      for(const pt of parts){ const p=map.project([pt.lng,pt.lat]);
+        fctx.globalAlpha=Math.max(0,Math.min(1,pt.life/0.5)); fctx.fillStyle=pt.col;
+        const r=Math.max(1.5, 3*spriteScale(distM(lng,lat,pt.lng,pt.lat))*3);
+        fctx.beginPath(); fctx.arc(p.x,p.y,r,0,Math.PI*2); fctx.fill(); }
+      fctx.globalAlpha=1;
+
+      // hranolky
+      fctx.textAlign='center'; fctx.textBaseline='middle';
+      for(const f of fries){ const p=map.project([f.lng,f.lat]);
+        const sz=Math.round(26*spriteScale(distM(lng,lat,f.lng,f.lat))); if(sz<6)continue;
+        fctx.font=sz+'px serif'; fctx.fillText('🍟',p.x,p.y); }
+      // smažák
+      for(const s of smazaks){ const p=map.project([s.lng,s.lat]);
+        const sz=Math.round(40*spriteScale(distM(lng,lat,s.lng,s.lat)));
+        fctx.save(); fctx.translate(p.x,p.y); fctx.rotate(s.t); fctx.font=sz+'px serif';
+        fctx.fillText('🧀',0,0); fctx.restore(); }
+
+      // popup hláška nad Šimmym
+      if(popT>0){ fctx.globalAlpha=Math.min(1,popT); fctx.font='bold 16px system-ui';
+        fctx.fillStyle='#000'; fctx.fillText(popMsg, innerWidth/2+1, innerHeight/2-70+1);
+        fctx.fillStyle='#ffd23f'; fctx.fillText(popMsg, innerWidth/2, innerHeight/2-70); fctx.globalAlpha=1; }
+
+      // červený flash při zásahu hráče
+      if(hurtCd>1.0){ fctx.fillStyle='rgba(255,0,0,'+((hurtCd-1.0)*0.8)+')'; fctx.fillRect(0,0,innerWidth,innerHeight); }
+    }
+
+    // ── Hlavní smyčka ─────────────────────────────────────────
+    let last=performance.now();
+    function frame(now){
+      const dt=Math.min((now-last)/1000,0.05); last=now;
+      update(dt);
+      map.jumpTo({ center:[lng,lat], zoom:ZOOM, pitch:PITCH, bearing });
+      render();
+      requestAnimationFrame(frame);
+    }
+
+    // ── Stylizace: "kreslená realita" + víc barev ─────────────
+    function stylize(){
+      try { map.setSky({ 'sky-color':'#8fc1ee','horizon-color':'#dfeaf4','fog-color':'#e9eef5',
+        'sky-horizon-blend':0.55,'horizon-fog-blend':0.5 }); } catch(e){}
+      // budovy: teplý gradient dle výšky + pestrá variace dle ID baráku
+      const col = ['interpolate',['linear'],
+        ['coalesce',['get','render_height'],['get','height'],8],
+        0,'#f0dcc0', 8,'#e3c79f', 18,'#d2b184', 35,'#c89a86', 70,'#b08a9a'];
+      let done=false;
+      ['building-3d','building-top','building'].forEach(id=>{
+        if(map.getLayer(id)){ try{
+          map.setPaintProperty(id,'fill-extrusion-color',col);
+          map.setPaintProperty(id,'fill-extrusion-opacity',1);
+          map.setPaintProperty(id,'fill-extrusion-vertical-gradient',true);
+          done=true;
+        }catch(e){} }
+      });
+      if(!done){ try{ map.addLayer({ id:'tst-3d', source:'openmaptiles','source-layer':'building',
+        type:'fill-extrusion', minzoom:14, paint:{ 'fill-extrusion-color':col,
+        'fill-extrusion-height':['coalesce',['get','render_height'],['get','height'],9],
+        'fill-extrusion-base':['coalesce',['get','render_min_height'],['get','min_height'],0],
+        'fill-extrusion-opacity':1 } }); }catch(e){} }
+      // pestřejší zem/zeleň/voda — projdi vrstvy a přebarvi dle typu
+      try{
+        const layers = map.getStyle().layers || [];
+        for(const L of layers){
+          const id=L.id, t=L.type;
+          if(t==='background'){ map.setPaintProperty(id,'background-color','#cfe0b8'); }
+          else if(/water/.test(id) && t==='fill'){ try{map.setPaintProperty(id,'fill-color','#7fc2e8');}catch(e){} }
+          else if(/(park|grass|wood|forest|green|garden|pitch|golf)/.test(id) && t==='fill'){ try{map.setPaintProperty(id,'fill-color','#9ccb6e');}catch(e){} }
+          else if(/(sand|beach)/.test(id) && t==='fill'){ try{map.setPaintProperty(id,'fill-color','#f0e2b0');}catch(e){} }
+        }
+      }catch(e){}
+    }
+
+    map.on('load', ()=>{
+      stylize();
+      for(let i=0;i<NPC_MAX;i++) spawnNpc(false);
+      updateHud();
+      requestAnimationFrame(frame);
+    });
+  } catch(e){ show('init: '+e.message); }
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
   </script>
 </body>
 </html>

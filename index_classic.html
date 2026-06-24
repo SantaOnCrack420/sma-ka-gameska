@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <title>GTA 7: Těšín City — Smažák s Hranolkama DLC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- WebGL 3D renderer (spodní vrstva) -->
+  <canvas id="gameCanvas"></canvas>
+  <!-- 2D overlay pro menu/gameover (horní vrstva, viditelná jen při MENU/OVER) -->
+  <canvas id="menuCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
+  <div id="ver" style="position:fixed;left:5px;bottom:3px;z-index:9998;color:#fff;opacity:.55;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">3D v73</div>
+  <div id="ui">
+    <div id="lives"></div>
+    <div id="score">SKÓRE: 0</div>
+    <div id="power-indicator" class="hidden">⚡ GRANÁT BORDEL ⚡</div>
+  </div>
+  <div id="joystick-zone"></div>
+  <div id="nick">
+    <div class="nbox">
+      <h2>ZADEJ SVŮJ NICK</h2>
+      <input id="nickInput" maxlength="12" autocomplete="off" autocapitalize="off" placeholder="4–12 znaků">
+      <div id="nickErr"></div>
+      <button id="nickBtn">▶ POKRAČOVAT</button>
+    </div>
+  </div>
+  <div id="settings" class="overlay">
+    <div class="sbox">
+      <h2>⚙️ NASTAVENÍ</h2>
+      <div class="srow">
+        <label><input type="checkbox" id="musicOnCb"> Hudba</label>
+        <input type="range" id="musicVolSl" min="0" max="100">
+      </div>
+      <div class="srow">
+        <label><input type="checkbox" id="sfxOnCb"> Zvuky</label>
+        <input type="range" id="sfxVolSl" min="0" max="100">
+      </div>
+      <button id="settingsClose">ZAVŘÍT</button>
+    </div>
+  </div>
+  <div id="leaderboard" class="overlay">
+    <div class="sbox">
+      <h2>🏆 TOP SMAŽKY</h2>
+      <ol id="lbList"></ol>
+      <button id="lbClose">ZAVŘÍT</button>
+    </div>
+  </div>
+  <script src="assets/mapdata.js"></script>
+  <script src="assets/mapvec.js"></script>
+  <script src="assets/mappoi.js"></script>
+  <script src="assets/three.min.js"></script>
+  <script src="render3d.js"></script>
+  <script src="game.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>
