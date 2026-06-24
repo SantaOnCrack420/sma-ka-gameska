@@ -117,7 +117,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v87</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v88</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -236,7 +236,7 @@
     const rnd = a => a[(Math.random()*a.length)|0];
 
     // ── NPC ───────────────────────────────────────────────────
-    const NPC_MAX = 16;
+    const NPC_MAX = 0;    // VYPNUTO — čistá plocha, čekáme na nové postavy (magenta zdroje)
     function spawnNpc(near){
       const ang = Math.random()*Math.PI*2;
       const r = near ? (60+Math.random()*120) : (25+Math.random()*110);
@@ -255,7 +255,7 @@
     }
 
     // ── Props (zeleň + mobiliář) — rozmístěné dle povrchu mapy ──
-    const props = [], PROP_MAX = 28;
+    const props = [], PROP_MAX = 0;   // VYPNUTO — dekorace přegenerujeme (magenta zdroje)
     function surfaceAt(sx, sy){
       try{
         const f = map.queryRenderedFeatures([sx, sy]);

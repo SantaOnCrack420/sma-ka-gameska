@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v87';   // bump: roster zpět na ověřené (vadné extrakty odebrány) — čeká na magenta zdroje
+const CACHE = 'smazak-v88';   // bump: čistá plocha — NPC i dekorace vypnuté, generujeme znovu (magenta)
 const FILES = [
   './',
   './index.html',
