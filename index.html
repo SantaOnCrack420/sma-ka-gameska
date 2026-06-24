@@ -35,7 +35,7 @@
     #eye.act{background:#ffd23f;color:#1a1a2e}
     #hint{position:fixed;right:18px;bottom:204px;z-index:6;color:#ffd23f;font-size:11px;
       background:#000a;padding:2px 6px;border-radius:6px}
-    #err{position:fixed;left:8px;bottom:8px;z-index:6;color:#ff6b6b;font:12px monospace;background:#000a;padding:4px 8px;border-radius:6px}
+    #err{position:fixed;left:8px;bottom:34px;z-index:6;color:#ff6b6b;font:12px monospace;background:#000a;padding:4px 8px;border-radius:6px}
   </style>
 </head>
 <body>
@@ -49,7 +49,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;left:5px;bottom:3px;z-index:9998;color:#fff;opacity:.55;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">MapLibre v77</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v78</div>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
   const show = m => document.getElementById('err').textContent = m;
@@ -64,8 +64,10 @@
       style: 'https://tiles.openfreemap.org/styles/liberty',
       center: SPAWN, zoom: ZOOM, pitch: PITCH, bearing: bearing, maxPitch: 75,
       interactive: false,                        // kameru řídíme my (honící)
-      attributionControl: true,
+      attributionControl: false,                 // přidáme ručně jako kompaktní ⓘ vlevo dole
     });
+    // Kredit OSM je licenčně povinný — schováme do malého ⓘ (rozbalí se ťuknutím), mimo herní tlačítka.
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     map.on('error', e => show('map: ' + (e&&e.error&&e.error.message||'?')));
 
     // ── Měřítko: metry ↔ stupně ───────────────────────────────

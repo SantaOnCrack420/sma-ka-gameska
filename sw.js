@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v77';   // bump: menší postavy/props + bližší zoom (19.9) — svět větší vůči postavám
+const CACHE = 'smazak-v78';   // bump: atribuce OSM schovaná do kompaktního ⓘ (vlevo dole, mimo tlačítka)
 const FILES = [
   './',
   './index.html',
