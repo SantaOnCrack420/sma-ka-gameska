@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v80';   // bump: hero artwork (menu_bg) na titulce + auto-update PWA (sama se refreshne)
+const CACHE = 'smazak-v81';   // bump: profi silnice — tmavý asfalt + světlé chodníky (casing) + středové čáry
 const FILES = [
   './',
   './index.html',
