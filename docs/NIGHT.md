@@ -17,5 +17,15 @@
 7. [ ] Kolize s baráky (OPATRNĚ — mění pohyb): queryRenderedFeatures u hráče, do baráku nepustí. Throttle.
 8. [ ] HUD/skóre polish + semínko reputačního systému.
 
+## CÍL (David ráno): kouzelné město GTA VII Český Těšín — vibe, hloubka, detaily. Klidně 3D prvky, ale BEZPEČNĚ.
+
 ## Log
 - v93 (start noci): urbánní zem, okna na fasádách (WINDOWS flag), pestré baráky, širší ulice, názvy ulic bez čísel, perspektiva NPC, atribuce do menu.
+- [HOTOVO v94] Střešní čepice (`sim-roof`, plný plát navrch → okna jen na stěnách, ne na střeše) + širší chodníky/cesty/pěšiny (RW +30%, path widthExpr).
+
+## Fronta 2 (vibe/hloubka — bezpečné MapLibre styling)
+- [ ] Atmosféra „zlatá hodina/podvečer": teplejší obloha + fog na horizontu (setSky tuning) → hloubka.
+- [ ] Stíny budov: fake — tmavší prstenec/AO u paty budov (fill-extrusion-vertical-gradient už je; zkus tmavší base barvu).
+- [ ] POI cedule obchodů (poi label styling) — názvy krámů = vibe.
+- [ ] Pouliční detaily: víc světel/dlažby textura na chodník (line-pattern už je) — případně lampy jako symboly.
+- [ ] Mlha do dálky / fade vzdálených budov = hloubka.
