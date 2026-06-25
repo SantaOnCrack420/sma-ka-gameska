@@ -28,4 +28,4 @@
 - [HOTOVO v97] Stíny budov: ambient occlusion (intensity 0.45) u paty/hran = hloubka.
 - [HOTOVO v96] POI cedule obchodů (poi label styling, tmavý text + krémový halo) — vibe.
 - [ ] Pouliční detaily: víc světel/dlažby textura na chodník (line-pattern už je) — případně lampy jako symboly.
-- [ ] Mlha do dálky / fade vzdálených budov = hloubka.
+- [HOTOVO v98] Mlha do dálky: vzdálené postavy lehce zamlžené (alpha dle dM) = hloubka.
