@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v97';   // bump: ambient occlusion budov (stiny u paty = hloubka)
+const CACHE = 'smazak-v98';   // bump: atmosfericky fade postav do dalky = hloubka
 const FILES = [
   './',
   './index.html',

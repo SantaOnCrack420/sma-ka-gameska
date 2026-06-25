@@ -118,7 +118,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v97</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v98</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -657,7 +657,8 @@
         if(im && im._ok){
           const fi = nf>1 ? (Math.floor(o.af||0)%nf) : 0;       // aktuální snímek chůze
           fctx.save(); fctx.translate(p.x,p.y); fctx.scale(it.face,1);
-          if(it.hit>0) fctx.globalAlpha=0.55+0.45*Math.random();   // záblesk po zásahu
+          fctx.globalAlpha = it.hit>0 ? (0.55+0.45*Math.random())
+            : Math.max(0.55, Math.min(1, 1-(dM-28)*0.006));        // mlha do dálky = hloubka
           fctx.drawImage(im, fi*sw, 0, sw, im.naturalHeight, -w/2, -h, w, h); fctx.restore(); fctx.globalAlpha=1;
         } else if(!it.prop){
           fctx.fillStyle=it.enemy?'#c0392b':'#3a6ea5';
