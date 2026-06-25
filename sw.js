@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v98';   // bump: atmosfericky fade postav do dalky = hloubka
+const CACHE = 'smazak-v99';   // bump: prirozenejsi NPC (obcas postoji, animace jen pri pohybu)
 const FILES = [
   './',
   './index.html',
