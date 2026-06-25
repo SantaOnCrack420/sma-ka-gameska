@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v99';   // bump: prirozenejsi NPC (obcas postoji, animace jen pri pohybu)
+const CACHE = 'smazak-v100';   // bump: kolize s baraky — neprochozi (sim-bld-hit + freeAt, klouzani po stene)
 const FILES = [
   './',
   './index.html',

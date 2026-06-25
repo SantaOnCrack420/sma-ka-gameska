@@ -118,7 +118,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v99</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v100</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -487,6 +487,13 @@
     const SPEED = 13;                           // m/s Šimmy (rychlejší chůze po zvětšených ulicích)
     let facing = 1, propTimer = 0, walkT = 0, walkFrame = 0;
     const simmyEl = document.getElementById('simmy');
+    // volné místo? (není tam barák) — dotaz na neviditelnou kolizní vrstvu půdorysů
+    function freeAt(ln, la){
+      try{ const sp=map.project([ln,la]);
+        const h=map.queryRenderedFeatures([sp.x,sp.y],{layers:['sim-bld-hit']});
+        return !(h && h.length);
+      }catch(e){ return true; }
+    }
     function update(dt){
       if(state==='MENU'){ bearing += dt*4; return; }   // titulka: pomalý nálet kamery
       if(state!=='PLAYING') return;
@@ -507,8 +514,11 @@
         const east  = ix*Math.cos(th)+iy*Math.sin(th);
         const north =-ix*Math.sin(th)+iy*Math.cos(th);
         const d=SPEED*dt*Math.min(1,len);
-        lat += north*d/MLAT;
-        lng += east*d/mlng(lat);
+        const nlat=lat+north*d/MLAT, nlng=lng+east*d/mlng(lat);
+        // kolize: baráky jsou neprůchozí. Klouzání po stěně (zkus oba směry zvlášť).
+        if(freeAt(nlng,nlat)){ lat=nlat; lng=nlng; }
+        else if(freeAt(lng,nlat)){ lat=nlat; }
+        else if(freeAt(nlng,lat)){ lng=nlng; }
       }
       // animace chůze: při pohybu cykluj 8 snímků, v klidu stůj na 1. snímku
       if(len>0){ walkT+=dt; if(walkT>=0.08){ walkT-=0.08; walkFrame=(walkFrame+1)%8; } }
@@ -767,6 +777,9 @@
         'fill-extrusion-height':['coalesce',['get','render_height'],['get','height'],9],
         'fill-extrusion-base':['coalesce',['get','render_min_height'],['get','min_height'],0],
         'fill-extrusion-opacity':1 } }); }catch(e){} }
+      // neviditelná plochá vrstva PŮDORYSŮ baráků — pro kolizi (queryRenderedFeatures)
+      if(!map.getLayer('sim-bld-hit')){ try{ map.addLayer({ id:'sim-bld-hit', source:'openmaptiles','source-layer':'building',
+        type:'fill', minzoom:14, paint:{ 'fill-opacity':0 } }); }catch(e){} }
       // (b) OKNA: 3 typy fasád přes fill-extrusion-pattern (id%3). Přepínač — kdyby vypadalo blbě, dej false.
       const WINDOWS = true;
       if(WINDOWS && map.hasImage('facade0')){
