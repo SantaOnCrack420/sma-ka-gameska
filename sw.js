@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v96';   // bump: cedule obchodu (POI popisky) — vibe
+const CACHE = 'smazak-v97';   // bump: ambient occlusion budov (stiny u paty = hloubka)
 const FILES = [
   './',
   './index.html',

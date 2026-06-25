@@ -118,7 +118,7 @@
   <div id="smaz" class="btn">🧀</div>
   <div id="fire" class="btn">🍟</div>
   <div id="err"></div>
-  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v96</div>
+  <div id="ver" style="position:fixed;right:8px;top:50px;z-index:9998;color:#fff;opacity:.5;font:bold 11px monospace;pointer-events:none;text-shadow:0 1px 2px #000">v97</div>
 
   <!-- ── MENU (titulka — hero artwork na pozadí) ── -->
   <div id="menu" class="overlay">
@@ -789,6 +789,11 @@
             'fill-extrusion-base':['coalesce',['get','render_height'],['get','height'],9],
             'fill-extrusion-height':['+',['coalesce',['get','render_height'],['get','height'],9],0.6],
             'fill-extrusion-opacity':1 } }); }catch(e){} }
+        // ambient occlusion = stíny u paty/hran budov (hloubka). Když verze neumí, no-op.
+        ['sim-bldg-0','sim-bldg-1','sim-bldg-2','sim-roof','building-3d'].forEach(id=>{ if(map.getLayer(id)){
+          try{ map.setPaintProperty(id,'fill-extrusion-ambient-occlusion-intensity',0.45); }catch(e){}
+          try{ map.setPaintProperty(id,'fill-extrusion-ambient-occlusion-radius',3.2); }catch(e){}
+        }});
       }
       // pestřejší zem/zeleň/voda — projdi vrstvy a přebarvi dle typu
       try{
