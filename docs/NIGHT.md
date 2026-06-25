@@ -29,3 +29,6 @@
 - [HOTOVO v96] POI cedule obchodů (poi label styling, tmavý text + krémový halo) — vibe.
 - [ ] Pouliční detaily: víc světel/dlažby textura na chodník (line-pattern už je) — případně lampy jako symboly.
 - [HOTOVO v98] Mlha do dálky: vzdálené postavy lehce zamlžené (alpha dle dM) = hloubka.
+- [HOTOVO v99] NPC přirozenější toulání: civil občas postojí, animace jen při pohybu.
+
+## Loop ukončen ~5:30 (limit) po 6 vylepšeních (v94–v99). Ráno převzal David.
