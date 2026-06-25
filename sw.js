@@ -1,4 +1,4 @@
-const CACHE = 'smazak-v100';   // bump: kolize s baraky — neprochozi (sim-bld-hit + freeAt, klouzani po stene)
+const CACHE = 'smazak-v101';   // bump: mnohem sirsi silnice + zluta delici cara (2 pruhy) + plne nazvy POI
 const FILES = [
   './',
   './index.html',
